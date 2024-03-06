@@ -91,13 +91,17 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#16-hypershift-optional">16 - Hypershift ( Optional )</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#17-optional-create-compute-node-in-a-day-2-operation">17 - (Optional) Create compute node in a day-2 operation</a>
+    <li class="toctree-l2"><a class="reference internal" href="#17-optional-disconnected-cluster-setup">17 - (Optional) Disconnected cluster setup</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#18-optional-create-compute-node-in-a-day-2-operation">18 - (Optional) Create compute node in a day-2 operation</a>
     </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../set-variables-host-vars/">3 Set Variables (host_vars)</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../run-the-playbooks/">4 Run the Playbooks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../run-the-playbooks-for-disconnected/">Run the Playbooks (Disconnected)</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../run-the-playbooks-for-hypershift/">Run the Playbooks (HyperShift)</a>
                   </li>
@@ -122,8 +126,8 @@
       <div class="wy-nav-content">
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
-    <li><a href=".." class="icon icon-home" aria-label="Docs"></a> &raquo;</li>
-          <li>Installation Instructions &raquo;</li>
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Installation Instructions</li>
       <li class="breadcrumb-item active">2 Set Variables (group_vars)</li>
     <li class="wy-breadcrumbs-aside">
           <a href="https://github.com/IBM/Ansible-OpenShift-Provisioning/edit/main/docs/set-variables-group-vars.md" class="icon icon-github"> Edit on GitHub</a>
@@ -274,6 +278,11 @@
 <td style="text-align: left;">192.168.10.201</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.file_server.port</strong></td>
+<td style="text-align: left;">The port on which the file server is listening. Will be embedded into all<br /> download urls. Defaults to protocol default port. Keep empty <code>''</code> to use <br /> default port</td>
+<td style="text-align: left;">10000</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.file_server.user</strong></td>
 <td style="text-align: left;">Username to connect to the file server. Must have sudo and SSH access.</td>
 <td style="text-align: left;">user1</td>
@@ -319,6 +328,11 @@
 <td style="text-align: left;"><strong>env.redhat.password</strong></td>
 <td style="text-align: left;">Password to Red Hat above user's account. Used to auto-attach<br /> necessary subscriptions to KVM Host, bastion VM, and pull live<br /> images for OpenShift.</td>
 <td style="text-align: left;">rEdHatPa$s!</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.redhat.manage_subscription</strong></td>
+<td style="text-align: left;">True or False. Would you like to subscribe the server with Red Hat?</td>
+<td style="text-align: left;">True</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.redhat.pull_secret</strong></td>
@@ -368,9 +382,24 @@
 <td style="text-align: left;">4</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.bastion.resources.vcpu_model_option</strong></td>
+<td style="text-align: left;">Configure the CPU model and CPU features exposed to the guest</td>
+<td style="text-align: left;">--cpu host</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.bastion.networking.ip</strong></td>
 <td style="text-align: left;">IPv4 address for the bastion.</td>
 <td style="text-align: left;">192.168.10.3</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.bastion.networking.ipv6</strong></td>
+<td style="text-align: left;">IPv6 address for the bastion if use_ipv6 variable is 'True'.</td>
+<td style="text-align: left;">fd00::3</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.bastion.networking.mac</strong></td>
+<td style="text-align: left;">MAC address for the bastion if use_dhcp variable is 'True'.</td>
+<td style="text-align: left;">52:54:00:18:1A:2B</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.bastion.networking.hostname</strong></td>
@@ -391,6 +420,16 @@
 <td style="text-align: left;"><strong>env.bastion.networking.gateway</strong></td>
 <td style="text-align: left;">IPv4 of he bastion's gateway server.</td>
 <td style="text-align: left;">192.168.10.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.bastion.networking.ipv6_gateway</strong></td>
+<td style="text-align: left;">IPv6 of he bastion's gateway server.</td>
+<td style="text-align: left;">fd00::1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.bastion.networking.ipv6_prefix</strong></td>
+<td style="text-align: left;">IPv6 prefix.</td>
+<td style="text-align: left;">64</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.bastion.networking.name<br />server1</strong></td>
@@ -467,7 +506,17 @@
 <tr>
 <td style="text-align: left;"><strong>env.cluster.networking.base_domain</strong></td>
 <td style="text-align: left;">The site name, where is the cluster being hosted? This will be combined with the metadata_name<br /> and hostnames to create FQDNs.</td>
-<td style="text-align: left;">ihost.com</td>
+<td style="text-align: left;">host.com</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.bastion.networking.ipv6_gateway</strong></td>
+<td style="text-align: left;">IPv6 of he bastion's gateway server.</td>
+<td style="text-align: left;">fd00::1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.bastion.networking.ipv6_prefix</strong></td>
+<td style="text-align: left;">IPv6 prefix.</td>
+<td style="text-align: left;">64</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.cluster.networking.nameserver1</strong></td>
@@ -483,6 +532,11 @@
 <td style="text-align: left;"><strong>env.cluster.networking.forwarder</strong></td>
 <td style="text-align: left;">What IPv4 address will be used to make external DNS calls for the cluster? Can use 1.1.1.1 or 8.8.8.8 as defaults.</td>
 <td style="text-align: left;">8.8.8.8</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.networking.interface</strong></td>
+<td style="text-align: left;">Name of the networking interface on the bastion from Linux's perspective. Most likely enc1.</td>
+<td style="text-align: left;">enc1</td>
 </tr>
 </tbody>
 </table>
@@ -512,6 +566,11 @@
 <td style="text-align: left;">4</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.bootstrap.vcpu_model_option</strong></td>
+<td style="text-align: left;">Configure the CPU model and CPU features exposed to the guest</td>
+<td style="text-align: left;">--cpu host</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.bootstrap.vm_name</strong></td>
 <td style="text-align: left;">Name of the temporary bootstrap node VM. Arbitrary value.</td>
 <td style="text-align: left;">bootstrap</td>
@@ -520,6 +579,16 @@
 <td style="text-align: left;"><strong>env.cluster.nodes.bootstrap.ip</strong></td>
 <td style="text-align: left;">IPv4 address of the temporary bootstrap node.</td>
 <td style="text-align: left;">192.168.10.4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.bootstrap.ipv6</strong></td>
+<td style="text-align: left;">IPv6 address for the bootstrap if use_ipv6 variable is 'True'.</td>
+<td style="text-align: left;">fd00::4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.bootstrap.mac</strong></td>
+<td style="text-align: left;">MAC address for the bootstrap node if use_dhcp variable is 'True'.</td>
+<td style="text-align: left;">52:54:00:18:1A:2B</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.bootstrap.hostname</strong></td>
@@ -554,6 +623,11 @@
 <td style="text-align: left;">4</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.control.vcpu_model_option</strong></td>
+<td style="text-align: left;">Configure the CPU model and CPU features exposed to the guest</td>
+<td style="text-align: left;">--cpu host</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.control.vm_name</strong></td>
 <td style="text-align: left;">Name of the control node VMs. Arbitrary values. Usually no more or less than 3 are used. Must match<br /> the total number of IP addresses and hostnames for control nodes. Use provided list format.</td>
 <td style="text-align: left;">control-1<br />control-2<br />control-3</td>
@@ -562,6 +636,16 @@
 <td style="text-align: left;"><strong>env.cluster.nodes.control.ip</strong></td>
 <td style="text-align: left;">IPv4 address of the control nodes. Use provided<br /> list formatting.</td>
 <td style="text-align: left;">192.168.10.5<br />192.168.10.6<br />192.168.10.7</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.control.ipv6</strong></td>
+<td style="text-align: left;">IPv6 address for the control nodes. Use iprovided<br /> list formatting (if use_ipv6 variable is 'True').</td>
+<td style="text-align: left;">fd00::5<br />fd00::6<br />fd00::7</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.control.mac</strong></td>
+<td style="text-align: left;">MAC address for the control node if use_dhcp variable is 'True'.</td>
+<td style="text-align: left;">52:54:00:18:1A:2B</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.control.hostname</strong></td>
@@ -596,6 +680,11 @@
 <td style="text-align: left;">2</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.compute.vcpu_model_option</strong></td>
+<td style="text-align: left;">Configure the CPU model and CPU features exposed to the guest</td>
+<td style="text-align: left;">--cpu host</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.compute.vm_name</strong></td>
 <td style="text-align: left;">Name of the compute node VMs. Arbitrary values. This list can be expanded to any<br /> number of nodes, minimum 2. Must match the total number of IP<br /> addresses and hostnames for compute nodes. Use provided list format.</td>
 <td style="text-align: left;">compute-1<br />compute-2</td>
@@ -604,6 +693,16 @@
 <td style="text-align: left;"><strong>env.cluster.nodes.compute.ip</strong></td>
 <td style="text-align: left;">IPv4 address of the compute nodes. Must match the total number of VM names and<br /> hostnames for compute nodes. Use provided list formatting.</td>
 <td style="text-align: left;">192.168.10.8<br />192.168.10.9</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.control.ipv6</strong></td>
+<td style="text-align: left;">IPv6 address for the compute nodes. Use iprovided<br /> list formatting (if use_ipv6 variable is 'True').</td>
+<td style="text-align: left;">fd00::8<br />fd00::9</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.compute.mac</strong></td>
+<td style="text-align: left;">MAC address for the compute node if use_dhcp variable is 'True'.</td>
+<td style="text-align: left;">52:54:00:18:1A:2B</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.compute.hostname</strong></td>
@@ -638,6 +737,11 @@
 <td style="text-align: left;">2</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.infra.vcpu_model_option</strong></td>
+<td style="text-align: left;"><b>(Optional)</b> Configure the CPU model and CPU features exposed to the guest</td>
+<td style="text-align: left;">--cpu host</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.infra.vm_name</strong></td>
 <td style="text-align: left;"><b>(Optional)</b> Name of additional infra node VMs. Arbitrary values. This list can be<br /> expanded to any number of nodes, minimum 2. Must match the total<br /> number of IP addresses and hostnames for infra nodes. Use provided list format.</td>
 <td style="text-align: left;">infra-1<br />infra-2</td>
@@ -645,7 +749,12 @@
 <tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.infra.ip</strong></td>
 <td style="text-align: left;"><b>(Optional)</b> IPv4 address of the infra nodes. This list can be expanded to any number of nodes,<br /> minimum 2. Use provided list formatting.</td>
-<td style="text-align: left;">192.168.10.8<br />192.168.10.9</td>
+<td style="text-align: left;">192.168.10.10<br />192.168.10.11</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.cluster.nodes.infra.ipv6</strong></td>
+<td style="text-align: left;"><b>(Optional)</b> IPv6 address of the infra nodes. iThis list can be expanded to any number of nodes,<br /> minimum 2. Use provided list formatting (if use_ipv6 variable is 'True').</td>
+<td style="text-align: left;">fd00::10<br />fd00::11</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.cluster.nodes.infra.hostname</strong></td>
@@ -713,7 +822,7 @@
 </tr>
 <tr>
 <td style="text-align: left;"><strong>env.install_config.control.architecture</strong></td>
-<td style="text-align: left;">Computing architecture for the control nodes. Must be s390x for clusters on IBM zSystems.</td>
+<td style="text-align: left;">Computing architecture for the control nodes. Must be s390x for clusters on IBM zSystems, amd64 for Intel or AMD systems, and arm64 for ARM servers.</td>
 <td style="text-align: left;">s390x</td>
 </tr>
 <tr>
@@ -821,6 +930,16 @@
 <td style="text-align: left;">NAT</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>env.use_ipv6</strong></td>
+<td style="text-align: left;">If ipv6 addresses should be assigned to the controle and compute nodes, this variable should be true (default) and the matching ipv6 settings should be specified.</td>
+<td style="text-align: left;">True</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>env.use_dhcp</strong></td>
+<td style="text-align: left;">If dhcp service should be used to get an IP address, this variable should be true and the matching mac address must be specified.</td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>env.jumphost.name</strong></td>
 <td style="text-align: left;">(Optional) If env.network.mode is set to 'NAT' the name of the jumphost (e.g. the name of KVM host if used as jumphost) should be specified.</td>
 <td style="text-align: left;">kvm-host-01</td>
@@ -909,6 +1028,11 @@
 </tr>
 </thead>
 <tbody>
+<tr>
+<td style="text-align: left;"><strong>hypershift.compute_node_type</strong></td>
+<td style="text-align: left;">Select the compute node type for HCP , either zKVM or zVM</td>
+<td style="text-align: left;">zvm</td>
+</tr>
 <tr>
 <td style="text-align: left;"><strong>hypershift.kvm_host</strong></td>
 <td style="text-align: left;">IPv4 address of KVM host for hypershift <br /> (kvm host where you want to run all oc commands and create VMs)</td>
@@ -1080,6 +1204,11 @@
 <td style="text-align: left;">multicluster-engine</td>
 </tr>
 <tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.agents_count</strong></td>
+<td style="text-align: left;">Number of agents for the hosted cluster <br /> The same number of compute nodes will be attached to Hosted Cotrol Plane</td>
+<td style="text-align: left;">2</td>
+</tr>
+<tr>
 <td style="text-align: left;"><strong>hypershift.agents_parms.static_ip_parms.static_ip</strong></td>
 <td style="text-align: left;">true or false - use static IPs for agents using NMState</td>
 <td style="text-align: left;">true</td>
@@ -1093,11 +1222,6 @@
 <td style="text-align: left;"><strong>hypershift.agents_parms.static_ip_parms.interface</strong></td>
 <td style="text-align: left;">Interface for agents for configuring NMStateConfig</td>
 <td style="text-align: left;">eth0</td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>hypershift.agents_parms.agents_count</strong></td>
-<td style="text-align: left;">Number of agents for the hosted cluster <br /> The same number of compute nodes will be attached to Hosted Cotrol Plane</td>
-<td style="text-align: left;">2</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>hypershift.agents_parms.agent_mac_addr</strong></td>
@@ -1124,9 +1248,256 @@
 <td style="text-align: left;">Nameserver to be used for agents</td>
 <td style="text-align: left;">192.168.10.1</td>
 </tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.network_mode</strong></td>
+<td style="text-align: left;">Network mode for zvm nodes <br /> Supported modes: vswitch,osa</td>
+<td style="text-align: left;">vswitch</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.disk_type</strong></td>
+<td style="text-align: left;">Disk type for zvm nodes <br /> Supported disk types: fcp, dasd</td>
+<td style="text-align: left;">dasd</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.vcpus</strong></td>
+<td style="text-align: left;">CPUs for each zvm node</td>
+<td style="text-align: left;">4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.memory</strong></td>
+<td style="text-align: left;">RAM for each zvm node</td>
+<td style="text-align: left;">16384</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nameserver</strong></td>
+<td style="text-align: left;">Nameserver for compute nodes</td>
+<td style="text-align: left;">192.168.10.1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.subnetmask</strong></td>
+<td style="text-align: left;">Subnet mask for compute nodes</td>
+<td style="text-align: left;">255.255.255.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.gateway</strong></td>
+<td style="text-align: left;">Gateway for compute nodes</td>
+<td style="text-align: left;">192.168.10.1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes</strong></td>
+<td style="text-align: left;">Set of parameters for zvm nodes <br /> Give the details of each zvm node here</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.name</strong></td>
+<td style="text-align: left;">Name of the zVM guest</td>
+<td style="text-align: left;">m1317002</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.host</strong></td>
+<td style="text-align: left;">Host name of the zVM guests <br /> which we use to login 3270 console</td>
+<td style="text-align: left;">boem1317</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.user</strong></td>
+<td style="text-align: left;">Username for zVM guests to login</td>
+<td style="text-align: left;">m1317002</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.password</strong></td>
+<td style="text-align: left;">password for the zVM guests to login</td>
+<td style="text-align: left;">password</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.interface.ifname</strong></td>
+<td style="text-align: left;">Network interface name for zVM guests</td>
+<td style="text-align: left;">encbdf0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.interface.nettype</strong></td>
+<td style="text-align: left;">Network type for zVM guests for network connectivity</td>
+<td style="text-align: left;">qeth</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.interface.subchannels</strong></td>
+<td style="text-align: left;">subchannels for zVM guests interfaces</td>
+<td style="text-align: left;">0.0.bdf0,0.0.bdf1,0.0.bdf2</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.interface.options</strong></td>
+<td style="text-align: left;">Configurations options</td>
+<td style="text-align: left;">layer2=1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.interface.ip</strong></td>
+<td style="text-align: left;">IP addresses for to be used for zVM nodes</td>
+<td style="text-align: left;">192.168.10.1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.dasd.disk_id</strong></td>
+<td style="text-align: left;">Disk id for dasd disk to be used for zVM node</td>
+<td style="text-align: left;">4404</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>hypershift.agents_parms.zvm_parameters.nodes.lun</strong></td>
+<td style="text-align: left;">Disk details of fcp disk to be used for zVM node</td>
+<td style="text-align: left;">4404</td>
+</tr>
 </tbody>
 </table>
-<h2 id="17-optional-create-compute-node-in-a-day-2-operation">17 - (Optional) Create compute node in a day-2 operation<a class="headerlink" href="#17-optional-create-compute-node-in-a-day-2-operation" title="Permanent link">#</a></h2>
+<h2 id="17-optional-disconnected-cluster-setup">17 - (Optional) Disconnected cluster setup<a class="headerlink" href="#17-optional-disconnected-cluster-setup" title="Permanent link">#</a></h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;"><strong>Variable Name</strong></th>
+<th style="text-align: left;"><strong>Description</strong></th>
+<th style="text-align: left;"><strong>Example</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>disconnected.enabled</strong></td>
+<td style="text-align: left;">True or False, to enable disconnected mode</td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.registry.url</strong></td>
+<td style="text-align: left;">String containing url of disconnected registry with or without port and without protocol</td>
+<td style="text-align: left;">registry.tt.testing:5000</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.registry.pull_secret</strong></td>
+<td style="text-align: left;">String containing pull secret of the disconnected registry to be applied on the <em>cluster</em>. <br /> Make sure to enclose pull_secret in 'single quotes' and it has appropriate pull access.</td>
+<td style="text-align: left;">'{"auths":{"registry.tt.<br />.testing:5000":{"auth":"b3Blb<br />...<br />4yQQ==","email":"test.<br />user@example.com"}}}'</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.registry.mirror_pull_ecret</strong></td>
+<td style="text-align: left;">String containing pull secret to use for mirroring. Contains Red Hat secret and registry pull <br /> secret. Make sure to enclose pull_secret in 'single quotes' and must be able to push to mirror<br /> registry.</td>
+<td style="text-align: left;">'{"auths":{"cloud.openshift<br />.com":{"auth":"b3Blb<br />...<br />4yQQ==","email":"redhat.<br />user@gmail.com", "registry.tt..testing:5000":<br />...<br />user@example.com"}}}'</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.registry.ca_trusted</strong></td>
+<td style="text-align: left;">True or False to indicate that mirror registry CA is implicitly trusted or needs to be made<br /> trusted on mirror host and cluster.</td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.registry.ca_cert</strong></td>
+<td style="text-align: left;">Multiline string containing the mirror registry CA bundle</td>
+<td style="text-align: left;">-----BEGIN CERTIFICATE-----<br />MIIDqDCCApCgAwIBAgIULL+d1HTYsiP+8jeWnqBis3N4BskwDQYJKoZIhvcNAQEF<br />...<br />-----END CERTIFICATE-----</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.host.name</strong></td>
+<td style="text-align: left;">String containing the hostname of the host, which will be used for mirroring</td>
+<td style="text-align: left;">mirror-host-1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.host.ip</strong></td>
+<td style="text-align: left;">String containing ip of the host, which will be used for mirroring</td>
+<td style="text-align: left;">192.168.10.99</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.host.user</strong></td>
+<td style="text-align: left;">String containing the username of the host, which will be used for mirroring</td>
+<td style="text-align: left;">mirroruser</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.host.pass</strong></td>
+<td style="text-align: left;">String containing the password of the host, which will be used for mirroring</td>
+<td style="text-align: left;">mirrorpassword</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.file_server.clients_dir</strong></td>
+<td style="text-align: left;">Directory path relative to the HTTP/FTP accessible directory on <strong>env.file_server</strong><br /> where client binary tarballs are kept</td>
+<td style="text-align: left;">clients</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.file_server.oc_mirror_tgz</strong></td>
+<td style="text-align: left;">Name of oc-mirror tarball on <strong>env.file_server</strong> in <strong>disconnected.mirroring.file_server.clients_dir</strong></td>
+<td style="text-align: left;">oc-mirror.tar.gz</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.legacy.platform</strong></td>
+<td style="text-align: left;">True or False if the platform should be mirrored using <code>oc adm release mirror</code>.</td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.legacy.ocp_quay_release_image_tag</strong></td>
+<td style="text-align: left;">The tag of the release image <em>quay.io/openshift-release-dev/ocp-release</em> to mirror and use</td>
+<td style="text-align: left;">4.13.1-s390x</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.legacy.ocp_org</strong></td>
+<td style="text-align: left;">The org part of the repo on the mirror registry where the release image will be pushed</td>
+<td style="text-align: left;">ocp4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.legacy.ocp_repo</strong></td>
+<td style="text-align: left;">The repo part of the repo on the mirror registry where the release image will be pushed</td>
+<td style="text-align: left;">openshift4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.legacy.ocp_tag</strong></td>
+<td style="text-align: left;">The tag part of the repo on the mirror registry where the release image will be pushed.<br /> Full image would be as below.:<br /><br /> disconnected.registry.url/disconnected.mirroring.legacy.ocp_org/disconnected...ocp_repo<br />:disconnected..ocp_tag</td>
+<td style="text-align: left;">v4.13.1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.release_image_tag</strong></td>
+<td style="text-align: left;">The ocp release image tag you want to install the cluster with. Used when legacy platform <br /> mirroring is disabled and <strong>disconnected.mirroring.oc_mirror.image_set</strong> contains platform <br /> entries.</td>
+<td style="text-align: left;">4.13.1-multi</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.oc_mirror_args.continue_on_error</strong></td>
+<td style="text-align: left;">True or False to give <code>--continue-on-error</code> flag to <code>oc-mirror</code></td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.oc_mirror_args.source_skip_tls</strong></td>
+<td style="text-align: left;">True or False to give <code>--source-skip-tls</code> flag to <code>oc-mirror</code></td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.post_mirror.mapping.replace.enabled</strong></td>
+<td style="text-align: left;">True or False to replace values in <code>mapping.txt</code> generated by oc-mirror. <br /> This also does a manual repush of the images in <code>mapping.txt</code>.</td>
+<td style="text-align: left;">False</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.post_mirror.mapping.replace.list</strong></td>
+<td style="text-align: left;">List of <strong>regexp</strong> and <strong>replace</strong> where every string/regular expression <br /> gets replaced by corresponding <em>replace</em> value.</td>
+<td style="text-align: left;">regexp: interal-url.com replace: external-url.com</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.image_set</strong></td>
+<td style="text-align: left;">YAML fields containing a standard <code>oc-mirror</code> <a href="https://docs.openshift.com/container-platform/latest/installing/disconnected_install/installing-mirroring-disconnected.html#oc-mirror-creating-image-set-config_installing-mirroring-disconnected">image set</a> with some minor changes to schema. <br /> Differences are documented as needed. Used to generate final image set.</td>
+<td style="text-align: left;">see template</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.image_set.storageConfig.registry.enabled</strong></td>
+<td style="text-align: left;">True or False to use registry storage backend for pushing mirrored content directly to the registry. <br /> Currently only this backend is supported.</td>
+<td style="text-align: left;">True</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.image_set.storageConfig.registry.imageURL.org</strong></td>
+<td style="text-align: left;">The org part of registry imageURL from standard image set.</td>
+<td style="text-align: left;">mirror</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.image_set.storageConfig.registry.imageURL.repo</strong></td>
+<td style="text-align: left;">The repo part of registry imageURL from standard image set. <br /> Final imageURL will be as below:<br /> <br /> disconnected.registry.url/disconnected.mirroring.oc_mirror.image_set.storageConfig <br />.registry.imageURL.org/disconnected...imageURL.repo</td>
+<td style="text-align: left;">oc-mirror-metadata</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirroring.oc_mirror.image_set.storageConfig.registry.skipTLS</strong></td>
+<td style="text-align: left;">True of False same purpose served as in standard image set i.e. skip the tls for the registry<br />   during mirroring.</td>
+<td style="text-align: left;">false</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>disconnected.mirrroing.oc_mirror.image_set.mirror</strong></td>
+<td style="text-align: left;">YAML containing a list of what needs to be mirrored. See the oc mirror image set documentation.</td>
+<td style="text-align: left;">see oc-mirror <a href="https://docs.openshift.com/container-platform/latest/installing/disconnected_install/installing-mirroring-disconnected.html#oc-mirror-creating-image-set-config_installing-mirroring-disconnected">image set</a>   documentation</td>
+</tr>
+</tbody>
+</table>
+<h2 id="18-optional-create-compute-node-in-a-day-2-operation">18 - (Optional) Create compute node in a day-2 operation<a class="headerlink" href="#18-optional-create-compute-node-in-a-day-2-operation" title="Permanent link">#</a></h2>
 <table>
 <thead>
 <tr>
@@ -1150,6 +1521,16 @@
 <td style="text-align: left;"><strong>day2_compute_node.vm_vm_ip</strong></td>
 <td style="text-align: left;">IPv4 address of the compute node.</td>
 <td style="text-align: left;">192.168.10.99</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>day2_compute_node.vm_vm_ipv6</strong></td>
+<td style="text-align: left;">IPv6 address of the compute node.</td>
+<td style="text-align: left;">fd00::99</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>day2_compute_node.vm_vm_interface</strong></td>
+<td style="text-align: left;">The network interface used for given IP addresses of the compute node.</td>
+<td style="text-align: left;">enc1</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>day2_compute_node.hostname</strong></td>

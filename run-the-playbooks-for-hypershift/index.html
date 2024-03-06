@@ -61,6 +61,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../run-the-playbooks/">4 Run the Playbooks</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../run-the-playbooks-for-disconnected/">Run the Playbooks (Disconnected)</a>
+                  </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="./">Run the Playbooks (HyperShift)</a>
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a>
@@ -106,8 +108,8 @@
       <div class="wy-nav-content">
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
-    <li><a href=".." class="icon icon-home" aria-label="Docs"></a> &raquo;</li>
-          <li>Installation Instructions &raquo;</li>
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Installation Instructions</li>
       <li class="breadcrumb-item active">Run the Playbooks (HyperShift)</li>
     <li class="wy-breadcrumbs-aside">
           <a href="https://github.com/IBM/Ansible-OpenShift-Provisioning/edit/main/docs/run-the-playbooks-for-hypershift.md" class="icon icon-github"> Edit on GitHub</a>
@@ -122,7 +124,8 @@
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">#</a></h2>
 <ul>
 <li>Running OCP Cluster ( Management Cluster )  </li>
-<li>KVM host with root user access or user with sudo privileges</li>
+<li>KVM host with root user access or user with sudo privileges if compute nodes are KVM.</li>
+<li>zvm host ( bastion ) and nodes if compute nodes are zVM.</li>
 </ul>
 <h3 id="network-prerequisites">Network Prerequisites<a class="headerlink" href="#network-prerequisites" title="Permanent link">#</a></h3>
 <ul>
@@ -131,7 +134,7 @@
 </ul>
 <h2 id="note">Note:<a class="headerlink" href="#note" title="Permanent link">#</a></h2>
 <ul>
-<li>As of now we are supporting only macvtap for hypershift Agent based installation.</li>
+<li>As of now we are supporting only macvtap for hypershift Agent based installation for KVM compute nodes.</li>
 </ul>
 <h2 id="step-1-setup-ansible-vault-for-management-cluster-credentials">Step-1: Setup Ansible Vault for Management Cluster Credentials<a class="headerlink" href="#step-1-setup-ansible-vault-for-management-cluster-credentials" title="Permanent link">#</a></h2>
 <h3 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">#</a></h3>
@@ -168,7 +171,7 @@ password: '&lt;password&gt;'
 <h2 id="step-2-initial-setup-for-hypershift">Step-2: Initial Setup for Hypershift<a class="headerlink" href="#step-2-initial-setup-for-hypershift" title="Permanent link">#</a></h2>
 <ul>
 <li>Navigate to the <a href="https://github.com/IBM/Ansible-OpenShift-Provisioning">root folder of the cloned Git repository</a> in your terminal (<code>ls</code> should show <a href="https://github.com/IBM/Ansible-OpenShift-Provisioning/blob/main/ansible.cfg">ansible.cfg</a>).</li>
-<li>Update all the variables in Section-16 ( Hypershift ) and Section-3 ( File Server : ip , protocol and iso_mount_dir ) in <a href="https://github.com/veera-damisetti/Ansible-OpenShift-Provisioning/blob/main/inventories/default/group_vars/all.yaml.template">all.yaml</a> before running the playbooks.</li>
+<li>Update variables as per the compute node type (zKVM /zVM) in Section-16 ( Hypershift ) and Section-3 ( File Server : ip , protocol and iso_mount_dir ) in <a href="https://github.com/veera-damisetti/Ansible-OpenShift-Provisioning/blob/main/inventories/default/group_vars/all.yaml.template">all.yaml</a> before running the playbooks.</li>
 <li>
 <p>First playbook to be run is setup_for_hypershift.yaml which will create inventory file for hypershift and will add ssh key to the kvm host.</p>
 </li>
@@ -194,6 +197,7 @@ password: '&lt;password&gt;'
 </li>
 <li>To look at what tasks are running in detail, open the playbook or roles/role-name/tasks/main.yaml</li>
 <li>Alternatively, to run all the playbooks at once, start the master playbook by running this shell command:</li>
+<li>After installation , you can find the details of cluster like kubeconfig and password in the installation directory ( $HOME/ansible_workdir/ ) </li>
 </ul>
 <pre class="codehilite"><code>ansible-playbook playbooks/hypershift.yaml --ask-vault-pass
 </code></pre>
@@ -290,7 +294,7 @@ password: '&lt;password&gt;'
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../run-the-playbooks/" class="btn btn-neutral float-left" title="4 Run the Playbooks"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../run-the-playbooks-for-disconnected/" class="btn btn-neutral float-left" title="Run the Playbooks (Disconnected)"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../troubleshooting/" class="btn btn-neutral float-right" title="Troubleshooting">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -319,7 +323,7 @@ password: '&lt;password&gt;'
         </span>
     
     
-      <span><a href="../run-the-playbooks/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../run-the-playbooks-for-disconnected/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../troubleshooting/" style="color: #fcfcfc">Next &raquo;</a></span>
