@@ -1,0 +1,15 @@
+---
+# Default variables for create_zvm_bastion role
+# These can be overridden by host_vars or group_vars
+
+# Default CPU and memory if not specified
+default_cpu: 4
+default_memory: 8192
+
+# Default timeout for guest creation
+guest_creation_timeout: 300
+
+# Whether to skip if guest already exists
+skip_if_exists: true
+
+# Made with Bob

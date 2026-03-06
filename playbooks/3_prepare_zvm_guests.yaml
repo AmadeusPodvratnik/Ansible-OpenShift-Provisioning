@@ -1,0 +1,259 @@
+---
+# 3_prepare_zvm_guests.yaml - Prepare for cluster node creation
+# This playbook downloads RHCOS, generates ignition configs, and prepares parm files
+
+- name: 3 prepare zvm guests - Download RHCOS artifacts
+  hosts: bastion_zvm
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display RHCOS download information
+      debug:
+        msg:
+          - "=== Downloading RHCOS Artifacts ==="
+          - "OCP Version: {{ env.ocp.version }}"
+          - "Download URL: {{ env.ocp.download_url }}"
+          - "Architecture: s390x"
+
+    - name: Set RHCOS version variables
+      set_fact:
+        rhcos_base_url: "{{ env.ocp.download_url }}/s390x/dependencies/rhcos/{{ env.ocp.version.split('.')[0] }}.{{ env.ocp.version.split('.')[1] }}/latest"
+        rhcos_version: "{{ env.ocp.version }}"
+
+    - name: Download RHCOS kernel
+      get_url:
+        url: "{{ rhcos_base_url }}/rhcos-live-kernel-s390x"
+        dest: /var/www/html/pxeboot/kernel.img
+        mode: '0644'
+        timeout: 300
+      register: kernel_download
+      retries: 3
+      delay: 10
+
+    - name: Download RHCOS initramfs
+      get_url:
+        url: "{{ rhcos_base_url }}/rhcos-live-initramfs.s390x.img"
+        dest: /var/www/html/pxeboot/initrd.img
+        mode: '0644'
+        timeout: 300
+      register: initrd_download
+      retries: 3
+      delay: 10
+
+    - name: Download RHCOS rootfs
+      get_url:
+        url: "{{ rhcos_base_url }}/rhcos-live-rootfs.s390x.img"
+        dest: /var/www/html/rhcos/rootfs.img
+        mode: '0644'
+        timeout: 600
+      register: rootfs_download
+      retries: 3
+      delay: 10
+
+    - name: Display download results
+      debug:
+        msg:
+          - "✓ RHCOS kernel downloaded: {{ kernel_download.dest }}"
+          - "✓ RHCOS initramfs downloaded: {{ initrd_download.dest }}"
+          - "✓ RHCOS rootfs downloaded: {{ rootfs_download.dest }}"
+
+- name: 3 prepare zvm guests - Download OpenShift installer
+  hosts: bastion_zvm
+  become: false
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Create working directory
+      file:
+        path: ~/ocp-install
+        state: directory
+        mode: '0755'
+
+    - name: Download openshift-install binary
+      get_url:
+        url: "{{ env.ocp.download_url }}/s390x/clients/ocp/{{ env.ocp.version }}/openshift-install-linux.tar.gz"
+        dest: ~/ocp-install/openshift-install-linux.tar.gz
+        mode: '0644'
+      register: installer_download
+
+    - name: Extract openshift-install binary
+      unarchive:
+        src: ~/ocp-install/openshift-install-linux.tar.gz
+        dest: ~/ocp-install/
+        remote_src: true
+        creates: ~/ocp-install/openshift-install
+
+    - name: Make openshift-install executable
+      file:
+        path: ~/ocp-install/openshift-install
+        mode: '0755'
+
+    - name: Download oc client
+      get_url:
+        url: "{{ env.ocp.download_url }}/s390x/clients/ocp/{{ env.ocp.version }}/openshift-client-linux.tar.gz"
+        dest: ~/ocp-install/openshift-client-linux.tar.gz
+        mode: '0644'
+
+    - name: Extract oc client
+      unarchive:
+        src: ~/ocp-install/openshift-client-linux.tar.gz
+        dest: ~/ocp-install/
+        remote_src: true
+        creates: ~/ocp-install/oc
+
+    - name: Copy oc and kubectl to /usr/local/bin
+      copy:
+        src: "~/ocp-install/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: '0755'
+        remote_src: true
+      loop:
+        - oc
+        - kubectl
+      become: true
+
+    - name: Display installer download results
+      debug:
+        msg:
+          - "✓ OpenShift installer downloaded and extracted"
+          - "✓ oc client installed to /usr/local/bin"
+
+- name: 3 prepare zvm guests - Generate install-config.yaml
+  hosts: bastion_zvm
+  become: false
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  roles:
+    - prepare_zvm_ignition
+
+- name: 3 prepare zvm guests - Generate ignition configs
+  hosts: bastion_zvm
+  become: false
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Create ignition working directory
+      file:
+        path: ~/ocp-install/ignition
+        state: directory
+        mode: '0755'
+
+    - name: Copy install-config.yaml to ignition directory
+      copy:
+        src: ~/ocp-install/install-config.yaml
+        dest: ~/ocp-install/ignition/install-config.yaml
+        remote_src: true
+
+    - name: Generate ignition configs
+      shell: |
+        cd ~/ocp-install/ignition
+        ~/ocp-install/openshift-install create ignition-configs --dir=.
+      args:
+        creates: ~/ocp-install/ignition/bootstrap.ign
+
+    - name: Verify ignition files were created
+      stat:
+        path: "~/ocp-install/ignition/{{ item }}"
+      register: ignition_files
+      loop:
+        - bootstrap.ign
+        - master.ign
+        - worker.ign
+      failed_when: not ignition_files.results[0].stat.exists
+
+    - name: Copy ignition files to HTTP server
+      copy:
+        src: "~/ocp-install/ignition/{{ item }}"
+        dest: "/var/www/html/ignition/{{ item }}"
+        mode: '0644'
+        remote_src: true
+      loop:
+        - bootstrap.ign
+        - master.ign
+        - worker.ign
+      become: true
+
+    - name: Set proper ownership for ignition files
+      file:
+        path: "/var/www/html/ignition/{{ item }}"
+        owner: apache
+        group: apache
+        mode: '0644'
+      loop:
+        - bootstrap.ign
+        - master.ign
+        - worker.ign
+      become: true
+
+    - name: Display ignition generation results
+      debug:
+        msg:
+          - "✓ Ignition configs generated"
+          - "✓ bootstrap.ign available at http://{{ ansible_host }}:8080/ignition/bootstrap.ign"
+          - "✓ master.ign available at http://{{ ansible_host }}:8080/ignition/master.ign"
+          - "✓ worker.ign available at http://{{ ansible_host }}:8080/ignition/worker.ign"
+
+- name: 3 prepare zvm guests - Generate parm files for z/VM nodes
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Find all node configuration files
+      find:
+        paths: "{{ inventory_dir }}/host_vars/"
+        patterns: "*-zvm.yaml"
+        excludes: "bastion-zvm.yaml"
+      register: node_configs
+
+    - name: Display parm file generation info
+      debug:
+        msg:
+          - "=== Generating Parm Files ==="
+          - "Found {{ node_configs.matched }} node configurations"
+          - "Parm files will be created for each node"
+
+    - name: Generate parm files for each node
+      include_role:
+        name: generate_zvm_parm_files
+      vars:
+        node_config_file: "{{ item.path }}"
+      loop: "{{ node_configs.files }}"
+
+    - name: Display parm file generation completion
+      debug:
+        msg:
+          - "✓ Parm files generated for all nodes"
+          - "✓ Files location: {{ playbook_dir }}/../ansible_workdir/parm_files/"
+
+- name: 3 prepare zvm guests - Display preparation summary
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display preparation completion
+      debug:
+        msg:
+          - "=== Guest Preparation Complete ==="
+          - "✓ RHCOS artifacts downloaded to bastion"
+          - "✓ OpenShift installer and oc client installed"
+          - "✓ Ignition configs generated and uploaded"
+          - "✓ Parm files generated for all nodes"
+          - ""
+          - "Bastion HTTP Server URLs:"
+          - "  - Kernel: http://{{ hostvars[groups['bastion_zvm'][0]]['ansible_host'] }}:8080/pxeboot/kernel.img"
+          - "  - Initrd: http://{{ hostvars[groups['bastion_zvm'][0]]['ansible_host'] }}:8080/pxeboot/initrd.img"
+          - "  - Rootfs: http://{{ hostvars[groups['bastion_zvm'][0]]['ansible_host'] }}:8080/rhcos/rootfs.img"
+          - "  - Bootstrap Ignition: http://{{ hostvars[groups['bastion_zvm'][0]]['ansible_host'] }}:8080/ignition/bootstrap.ign"
+          - "  - Master Ignition: http://{{ hostvars[groups['bastion_zvm'][0]]['ansible_host'] }}:8080/ignition/master.ign"
+          - "  - Worker Ignition: http://{{ hostvars[groups['bastion_zvm'][0]]['ansible_host'] }}:8080/ignition/worker.ign"
+          - ""
+          - "Ready to proceed with node creation (4_create_zvm_nodes.yaml)"
+
+# Made with Bob

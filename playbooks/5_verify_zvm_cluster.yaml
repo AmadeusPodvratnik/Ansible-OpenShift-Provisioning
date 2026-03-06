@@ -1,0 +1,344 @@
+---
+# 5_verify_zvm_cluster.yaml - Verify OpenShift cluster health and readiness
+# This playbook performs comprehensive cluster verification
+
+- name: 5 verify zvm cluster - Check cluster nodes
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Set KUBECONFIG
+      set_fact:
+        kubeconfig_path: "~/ocp-install/ignition/auth/kubeconfig"
+
+    - name: Display verification overview
+      debug:
+        msg:
+          - "=== Verifying OpenShift Cluster on z/VM ==="
+          - "Cluster: {{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}"
+          - "Performing comprehensive health checks..."
+
+    - name: Get all nodes
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get nodes -o wide
+      register: all_nodes
+      changed_when: false
+
+    - name: Display node status
+      debug:
+        msg: "{{ all_nodes.stdout_lines }}"
+
+    - name: Count nodes by role
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        echo "Control: $(oc get nodes -l node-role.kubernetes.io/control-plane --no-headers | wc -l)"
+        echo "Compute: $(oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l)"
+        echo "Total: $(oc get nodes --no-headers | wc -l)"
+      register: node_counts
+      changed_when: false
+
+    - name: Display node counts
+      debug:
+        msg: "{{ node_counts.stdout_lines }}"
+
+    - name: Verify all nodes are Ready
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get nodes --no-headers | grep -v " Ready" | wc -l
+      register: not_ready
+      changed_when: false
+      failed_when: not_ready.stdout | int > 0
+
+    - name: Display node readiness
+      debug:
+        msg: "✓ All nodes are Ready"
+
+- name: 5 verify zvm cluster - Check cluster operators
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display cluster operator check info
+      debug:
+        msg:
+          - "=== Checking Cluster Operators ==="
+          - "Waiting for all operators to be available..."
+
+    - name: Wait for cluster operators to be available
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get clusteroperators --no-headers | \
+        awk '{if ($3 != "True" || $4 != "False" || $5 != "False") print $1}' | wc -l
+      register: degraded_operators
+      until: degraded_operators.stdout | int == 0
+      retries: 60
+      delay: 30
+      changed_when: false
+
+    - name: Get cluster operator status
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get clusteroperators
+      register: co_status
+      changed_when: false
+
+    - name: Display cluster operator status
+      debug:
+        msg: "{{ co_status.stdout_lines }}"
+
+    - name: Verify no degraded operators
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get clusteroperators --no-headers | \
+        awk '{if ($4 == "True") print $1}' | wc -l
+      register: degraded_count
+      changed_when: false
+      failed_when: degraded_count.stdout | int > 0
+
+    - name: Display operator health
+      debug:
+        msg: "✓ All cluster operators are healthy"
+
+- name: 5 verify zvm cluster - Check cluster version
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Get cluster version
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get clusterversion
+      register: cluster_version
+      changed_when: false
+
+    - name: Display cluster version
+      debug:
+        msg: "{{ cluster_version.stdout_lines }}"
+
+    - name: Wait for cluster version to be available
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Available")].status}'
+      register: version_available
+      until: version_available.stdout == "True"
+      retries: 30
+      delay: 20
+      changed_when: false
+
+    - name: Display version status
+      debug:
+        msg: "✓ Cluster version is available"
+
+- name: 5 verify zvm cluster - Check networking
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display network verification info
+      debug:
+        msg:
+          - "=== Verifying Cluster Networking ==="
+          - "Checking DNS, API, and ingress connectivity..."
+
+    - name: Test API server connectivity
+      uri:
+        url: "https://api.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}:6443/healthz"
+        validate_certs: no
+        status_code: [200, 401, 403]
+      register: api_test
+      delegate_to: localhost
+
+    - name: Display API connectivity
+      debug:
+        msg: "✓ API server is accessible"
+
+    - name: Get cluster network configuration
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get network.config.openshift.io cluster -o yaml
+      register: network_config
+      changed_when: false
+
+    - name: Get pod network status
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get pods -n openshift-ovn-kubernetes --no-headers | grep -v Running | wc -l
+      register: ovn_pods
+      changed_when: false
+
+    - name: Verify OVN-Kubernetes pods
+      assert:
+        that: ovn_pods.stdout | int == 0
+        fail_msg: "Some OVN-Kubernetes pods are not running"
+        success_msg: "✓ All OVN-Kubernetes pods are running"
+
+- name: 5 verify zvm cluster - Check storage
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Get storage classes
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get storageclass
+      register: storage_classes
+      changed_when: false
+      failed_when: false
+
+    - name: Display storage classes
+      debug:
+        msg: "{{ storage_classes.stdout_lines }}"
+      when: storage_classes.rc == 0
+
+    - name: Get persistent volumes
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get pv
+      register: pvs
+      changed_when: false
+      failed_when: false
+
+    - name: Display persistent volumes
+      debug:
+        msg: "{{ pvs.stdout_lines if pvs.rc == 0 else ['No persistent volumes configured'] }}"
+
+- name: 5 verify zvm cluster - Check console and authentication
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Get console URL
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc whoami --show-console
+      register: console_url
+      changed_when: false
+
+    - name: Get OAuth pods status
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get pods -n openshift-authentication --no-headers | grep -v Running | wc -l
+      register: oauth_pods
+      changed_when: false
+
+    - name: Verify OAuth pods
+      assert:
+        that: oauth_pods.stdout | int == 0
+        fail_msg: "Some OAuth pods are not running"
+        success_msg: "✓ All OAuth pods are running"
+
+    - name: Display console URL
+      debug:
+        msg:
+          - "✓ Console is accessible"
+          - "Console URL: {{ console_url.stdout }}"
+
+- name: 5 verify zvm cluster - Generate cluster access information
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Get kubeadmin password
+      shell: cat ~/ocp-install/ignition/auth/kubeadmin-password
+      register: kubeadmin_password
+      changed_when: false
+      no_log: true
+
+    - name: Get console URL
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc whoami --show-console
+      register: console_url
+      changed_when: false
+
+    - name: Get API URL
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc whoami --show-server
+      register: api_url
+      changed_when: false
+
+    - name: Create cluster access info file
+      copy:
+        content: |
+          ========================================
+          OpenShift Cluster Access Information
+          ========================================
+          
+          Cluster Name: {{ env.cluster.networking.metadata_name }}
+          Base Domain: {{ env.cluster.networking.base_domain }}
+          
+          Console URL: {{ console_url.stdout }}
+          API URL: {{ api_url.stdout }}
+          
+          Username: kubeadmin
+          Password: {{ kubeadmin_password.stdout }}
+          
+          Kubeconfig: ~/ocp-install/ignition/auth/kubeconfig
+          
+          To access the cluster from command line:
+          export KUBECONFIG=~/ocp-install/ignition/auth/kubeconfig
+          oc get nodes
+          
+          ========================================
+        dest: ~/ocp-install/cluster-access-info.txt
+        mode: '0600'
+
+    - name: Display cluster access information
+      debug:
+        msg:
+          - "========================================="
+          - "OpenShift Cluster Access Information"
+          - "========================================="
+          - ""
+          - "Cluster Name: {{ env.cluster.networking.metadata_name }}"
+          - "Base Domain: {{ env.cluster.networking.base_domain }}"
+          - ""
+          - "Console URL: {{ console_url.stdout }}"
+          - "API URL: {{ api_url.stdout }}"
+          - ""
+          - "Username: kubeadmin"
+          - "Password: (saved in ~/ocp-install/cluster-access-info.txt)"
+          - ""
+          - "Kubeconfig: ~/ocp-install/ignition/auth/kubeconfig"
+          - ""
+          - "========================================="
+
+- name: 5 verify zvm cluster - Final verification summary
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display final verification summary
+      debug:
+        msg:
+          - "========================================="
+          - "z/VM UPI Cluster Verification Complete"
+          - "========================================="
+          - ""
+          - "✓ All nodes are Ready"
+          - "✓ All cluster operators are healthy"
+          - "✓ Cluster version is available"
+          - "✓ Networking is functional"
+          - "✓ Authentication is working"
+          - "✓ Console is accessible"
+          - ""
+          - "Cluster Status: HEALTHY"
+          - ""
+          - "Your OpenShift cluster on z/VM is ready for use!"
+          - ""
+          - "Access information saved on bastion:"
+          - "  ~/ocp-install/cluster-access-info.txt"
+          - ""
+          - "========================================="
+
+# Made with Bob

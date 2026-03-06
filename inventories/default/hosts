@@ -1,2 +1,10 @@
+# Ansible Inventory for z/VM UPI Deployment - TEST SETUP
+
+[all]
+bastion-zvm ansible_host=localhost
+
 [localhost]
 127.0.0.1 ansible_connection=local ansible_become_password=
+
+[bastion]
+bastion-zvm

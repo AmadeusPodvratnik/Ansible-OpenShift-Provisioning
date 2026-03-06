@@ -1,0 +1,243 @@
+---
+# 2_setup_zvm_bastion.yaml - Configure bastion services
+# This playbook sets up DNS, HAProxy, HTTP server, and firewall on the bastion
+
+- name: 2 setup zvm bastion - Install required packages
+  hosts: bastion_zvm
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display bastion setup information
+      debug:
+        msg:
+          - "=== Setting Up Bastion Services ==="
+          - "Hostname: {{ ansible_hostname }}"
+          - "IP Address: {{ ansible_host }}"
+          - "Services: DNS, HAProxy, HTTP, Firewall"
+
+    - name: Install bastion packages
+      package:
+        name:
+          - bind
+          - bind-utils
+          - haproxy
+          - httpd
+          - mod_ssl
+          - firewalld
+          - python3-policycoreutils
+          - rsync
+          - expect
+        state: present
+
+    - name: Enable and start firewalld
+      systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+- name: 2 setup zvm bastion - Configure DNS server
+  hosts: bastion_zvm
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  roles:
+    - dns
+
+- name: 2 setup zvm bastion - Configure HAProxy load balancer
+  hosts: bastion_zvm
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  roles:
+    - haproxy
+
+- name: 2 setup zvm bastion - Configure HTTP server
+  hosts: bastion_zvm
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  roles:
+    - httpd
+
+- name: 2 setup zvm bastion - Configure firewall rules
+  hosts: bastion_zvm
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Open DNS port (53/tcp)
+      firewalld:
+        port: 53/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Open DNS port (53/udp)
+      firewalld:
+        port: 53/udp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Open HTTP port (80/tcp)
+      firewalld:
+        port: 80/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Open HTTPS port (443/tcp)
+      firewalld:
+        port: 443/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Open HTTP server port (8080/tcp)
+      firewalld:
+        port: 8080/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Open API port (6443/tcp)
+      firewalld:
+        port: 6443/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Open machine config port (22623/tcp)
+      firewalld:
+        port: 22623/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Reload firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+- name: 2 setup zvm bastion - Verify services
+  hosts: bastion_zvm
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Check DNS service status
+      systemd:
+        name: named
+        state: started
+        enabled: true
+      register: dns_status
+
+    - name: Check HAProxy service status
+      systemd:
+        name: haproxy
+        state: started
+        enabled: true
+      register: haproxy_status
+
+    - name: Check HTTP service status
+      systemd:
+        name: httpd
+        state: started
+        enabled: true
+      register: httpd_status
+
+    - name: Test DNS resolution
+      shell: |
+        dig @localhost {{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }} +short
+      register: dns_test
+      changed_when: false
+      failed_when: false
+
+    - name: Test HAProxy configuration
+      shell: haproxy -c -f /etc/haproxy/haproxy.cfg
+      register: haproxy_test
+      changed_when: false
+
+    - name: Test HTTP server
+      uri:
+        url: "http://localhost:8080"
+        status_code: [200, 403]
+      register: http_test
+
+    - name: Display service status
+      debug:
+        msg:
+          - "=== Bastion Services Status ==="
+          - "DNS (named): {{ 'Running' if dns_status.status.ActiveState == 'active' else 'Not Running' }}"
+          - "HAProxy: {{ 'Running' if haproxy_status.status.ActiveState == 'active' else 'Not Running' }}"
+          - "HTTP (httpd): {{ 'Running' if httpd_status.status.ActiveState == 'active' else 'Not Running' }}"
+          - "Firewall: Configured"
+          - ""
+          - "DNS Test: {{ 'OK' if dns_test.rc == 0 else 'Check Configuration' }}"
+          - "HAProxy Config: {{ 'Valid' if haproxy_test.rc == 0 else 'Invalid' }}"
+          - "HTTP Server: {{ 'Accessible' if http_test.status in [200, 403] else 'Not Accessible' }}"
+
+- name: 2 setup zvm bastion - Create directories for artifacts
+  hosts: bastion_zvm
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Create ignition configs directory
+      file:
+        path: /var/www/html/ignition
+        state: directory
+        mode: '0755'
+        owner: apache
+        group: apache
+
+    - name: Create RHCOS artifacts directory
+      file:
+        path: /var/www/html/rhcos
+        state: directory
+        mode: '0755'
+        owner: apache
+        group: apache
+
+    - name: Create PXE boot directory
+      file:
+        path: /var/www/html/pxeboot
+        state: directory
+        mode: '0755'
+        owner: apache
+        group: apache
+
+    - name: Set SELinux context for web directories
+      sefcontext:
+        target: '/var/www/html(/.*)?'
+        setype: httpd_sys_content_t
+        state: present
+      when: ansible_selinux.status == "enabled"
+
+    - name: Apply SELinux context
+      shell: restorecon -Rv /var/www/html
+      when: ansible_selinux.status == "enabled"
+      changed_when: false
+
+    - name: Display bastion setup completion
+      debug:
+        msg:
+          - "=== Bastion Setup Complete ==="
+          - "✓ DNS server configured and running"
+          - "✓ HAProxy load balancer configured and running"
+          - "✓ HTTP server configured and running"
+          - "✓ Firewall rules configured"
+          - "✓ Artifact directories created"
+          - ""
+          - "Bastion is ready to serve cluster deployment"
+          - "Ready to proceed with guest preparation (3_prepare_zvm_guests.yaml)"
+
+# Made with Bob

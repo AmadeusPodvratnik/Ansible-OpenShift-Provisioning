@@ -1,0 +1,319 @@
+---
+# 4_create_zvm_nodes.yaml - Create and boot OpenShift cluster nodes on z/VM
+# This playbook creates bootstrap, control, and compute nodes
+
+- name: 4 create zvm nodes - Display deployment overview
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Find node configuration files
+      find:
+        paths: "{{ inventory_dir }}/host_vars/"
+        patterns: "*-zvm.yaml"
+        excludes: "bastion-zvm.yaml"
+      register: all_nodes
+
+    - name: Count nodes by type
+      set_fact:
+        bootstrap_count: "{{ all_nodes.files | selectattr('path', 'search', 'bootstrap') | list | length }}"
+        control_count: "{{ all_nodes.files | selectattr('path', 'search', 'control') | list | length }}"
+        compute_count: "{{ all_nodes.files | selectattr('path', 'search', 'compute') | list | length }}"
+
+    - name: Display node creation overview
+      debug:
+        msg:
+          - "=== Creating OpenShift Cluster Nodes on z/VM ==="
+          - "Bootstrap Nodes: {{ bootstrap_count }}"
+          - "Control Nodes: {{ control_count }}"
+          - "Compute Nodes: {{ compute_count }}"
+          - "Total Cluster Nodes: {{ bootstrap_count | int + control_count | int + compute_count | int }}"
+          - ""
+          - "Deployment Sequence:"
+          - "1. Create and boot bootstrap node"
+          - "2. Create and boot control plane nodes"
+          - "3. Wait for bootstrap completion"
+          - "4. Destroy bootstrap node"
+          - "5. Create and boot compute nodes"
+          - "6. Approve CSRs"
+
+#
+# PHASE 1: Bootstrap Node
+#
+- name: 4 create zvm nodes - Create bootstrap node
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/host_vars/bootstrap-zvm.yaml"
+  tasks:
+    - name: Display bootstrap creation info
+      debug:
+        msg:
+          - "=== Creating Bootstrap Node ==="
+          - "Guest Name: {{ zvm_guest }}"
+          - "IP Address: {{ host_ip }}"
+          - "Ignition: bootstrap.ign"
+
+    - name: Create bootstrap guest on z/VM
+      include_role:
+        name: create_zvm_bootstrap
+
+    - name: Wait for bootstrap API to be available
+      uri:
+        url: "https://{{ host_ip }}:6443/healthz"
+        validate_certs: no
+        status_code: [200, 401, 403]
+      register: bootstrap_api
+      until: bootstrap_api.status in [200, 401, 403]
+      retries: 60
+      delay: 10
+      delegate_to: localhost
+
+    - name: Display bootstrap status
+      debug:
+        msg:
+          - "✓ Bootstrap node created and booted"
+          - "✓ Bootstrap API is accessible"
+
+#
+# PHASE 2: Control Plane Nodes
+#
+- name: 4 create zvm nodes - Create control plane nodes
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Find control node configurations
+      find:
+        paths: "{{ inventory_dir }}/host_vars/"
+        patterns: "control-*-zvm.yaml"
+      register: control_nodes
+
+    - name: Display control plane creation info
+      debug:
+        msg:
+          - "=== Creating Control Plane Nodes ==="
+          - "Number of nodes: {{ control_nodes.matched }}"
+
+    - name: Create each control plane node
+      include_role:
+        name: create_zvm_control_nodes
+      vars:
+        control_node_config: "{{ item.path }}"
+      loop: "{{ control_nodes.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: Display control plane status
+      debug:
+        msg:
+          - "✓ All control plane nodes created and booted"
+          - "✓ Nodes are joining the cluster"
+
+#
+# PHASE 3: Wait for Bootstrap Completion
+#
+- name: 4 create zvm nodes - Wait for bootstrap completion
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display bootstrap wait info
+      debug:
+        msg:
+          - "=== Waiting for Bootstrap to Complete ==="
+          - "This may take 20-30 minutes"
+          - "Monitoring bootstrap progress..."
+
+    - name: Set KUBECONFIG environment
+      set_fact:
+        kubeconfig_path: "~/ocp-install/ignition/auth/kubeconfig"
+
+    - name: Wait for bootstrap to complete
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        ~/ocp-install/openshift-install wait-for bootstrap-complete \
+          --dir ~/ocp-install/ignition --log-level=info
+      register: bootstrap_complete
+      failed_when: bootstrap_complete.rc != 0
+      async: 3600
+      poll: 30
+
+    - name: Display bootstrap completion
+      debug:
+        msg:
+          - "✓ Bootstrap process completed successfully"
+          - "✓ Control plane is initialized"
+          - "✓ Ready to destroy bootstrap node"
+
+#
+# PHASE 4: Destroy Bootstrap Node
+#
+- name: 4 create zvm nodes - Destroy bootstrap node
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/host_vars/bootstrap-zvm.yaml"
+  tasks:
+    - name: Display bootstrap destruction info
+      debug:
+        msg:
+          - "=== Destroying Bootstrap Node ==="
+          - "Bootstrap is no longer needed"
+          - "Guest Name: {{ zvm_guest }}"
+
+    - name: Stop bootstrap guest on z/VM
+      include_role:
+        name: destroy_zvm_guest
+      vars:
+        guest_to_destroy: "{{ zvm_guest }}"
+        zvm_hypervisor: "{{ zvm_host }}"
+
+    - name: Display bootstrap destruction status
+      debug:
+        msg:
+          - "✓ Bootstrap node destroyed"
+          - "✓ Resources freed"
+
+#
+# PHASE 5: Compute Nodes
+#
+- name: 4 create zvm nodes - Create compute nodes
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Find compute node configurations
+      find:
+        paths: "{{ inventory_dir }}/host_vars/"
+        patterns: "compute-*-zvm.yaml"
+      register: compute_nodes
+
+    - name: Display compute node creation info
+      debug:
+        msg:
+          - "=== Creating Compute Nodes ==="
+          - "Number of nodes: {{ compute_nodes.matched }}"
+
+    - name: Create each compute node
+      include_role:
+        name: create_zvm_compute_nodes
+      vars:
+        compute_node_config: "{{ item.path }}"
+      loop: "{{ compute_nodes.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: Display compute node status
+      debug:
+        msg:
+          - "✓ All compute nodes created and booted"
+          - "✓ Nodes are joining the cluster"
+
+#
+# PHASE 6: Approve CSRs
+#
+- name: 4 create zvm nodes - Approve pending CSRs
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display CSR approval info
+      debug:
+        msg:
+          - "=== Approving Certificate Signing Requests ==="
+          - "Waiting for nodes to submit CSRs..."
+
+    - name: Wait for CSRs to appear
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get csr --no-headers | wc -l
+      register: csr_count
+      until: csr_count.stdout | int > 0
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - name: Approve all pending CSRs
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get csr -o name | xargs oc adm certificate approve
+      register: csr_approval
+      changed_when: "'approved' in csr_approval.stdout"
+      failed_when: false
+
+    - name: Wait for additional CSRs (kubelet serving certificates)
+      pause:
+        seconds: 60
+
+    - name: Approve kubelet serving CSRs
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get csr -o name | xargs oc adm certificate approve
+      register: csr_approval_2
+      changed_when: "'approved' in csr_approval_2.stdout"
+      failed_when: false
+
+    - name: Display CSR approval status
+      debug:
+        msg:
+          - "✓ Certificate Signing Requests approved"
+          - "✓ Nodes are being configured"
+
+#
+# PHASE 7: Wait for Nodes to be Ready
+#
+- name: 4 create zvm nodes - Wait for all nodes to be Ready
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Display node readiness wait info
+      debug:
+        msg:
+          - "=== Waiting for Nodes to be Ready ==="
+          - "This may take 10-15 minutes"
+
+    - name: Wait for all nodes to be Ready
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get nodes --no-headers | grep -v Ready | wc -l
+      register: not_ready_count
+      until: not_ready_count.stdout | int == 0
+      retries: 60
+      delay: 15
+      changed_when: false
+
+    - name: Get node status
+      shell: |
+        export KUBECONFIG={{ kubeconfig_path }}
+        oc get nodes
+      register: node_status
+      changed_when: false
+
+    - name: Display node status
+      debug:
+        msg: "{{ node_status.stdout_lines }}"
+
+    - name: Display node creation completion
+      debug:
+        msg:
+          - "=== Node Creation Complete ==="
+          - "✓ Bootstrap node created and destroyed"
+          - "✓ Control plane nodes created and ready"
+          - "✓ Compute nodes created and ready"
+          - "✓ All CSRs approved"
+          - "✓ All nodes are Ready"
+          - ""
+          - "Cluster nodes are operational"
+          - "Ready to proceed with cluster verification (5_verify_zvm_cluster.yaml)"
+
+# Made with Bob

@@ -1,0 +1,134 @@
+---
+# 1_create_zvm_bastion.yaml - Create bastion node on z/VM
+# This playbook provisions the bastion guest on z/VM hypervisor
+
+- name: 1 create zvm bastion - Load bastion configuration
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/host_vars/bastion-zvm.yaml"
+  tasks:
+    - name: Display bastion configuration
+      debug:
+        msg:
+          - "=== Creating Bastion on z/VM ==="
+          - "OCP Node Name: {{ ocp_nodename }}"
+          - "z/VM Guest: {{ zvm_guest }}"
+          - "z/VM Host: {{ zvm_host }}"
+          - "IP Address: {{ host_ip }}"
+          - "CPU: {{ cpu }}"
+          - "Memory: {{ memory }} MB"
+          - "DASD Devices: {{ zrd_dasd | default([]) | length }}"
+          - "FCP Devices: {{ zrd_fcp | default([]) | length }}"
+          - "Network Devices: {{ zrd_znet | default([]) | length }}"
+
+    - name: Validate bastion configuration
+      assert:
+        that:
+          - ocp_nodename is defined
+          - zvm_guest is defined
+          - zvm_user is defined
+          - zvm_pass is defined
+          - zvm_host is defined
+          - host_ip is defined
+          - cpu is defined
+          - memory is defined
+        fail_msg: "Bastion configuration incomplete. Check host_vars/bastion-zvm.yaml"
+        success_msg: "Bastion configuration validated"
+
+- name: 1 create zvm bastion - Create bastion guest on z/VM
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/host_vars/bastion-zvm.yaml"
+  roles:
+    - create_zvm_bastion
+
+- name: 1 create zvm bastion - Wait for bastion to be accessible
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/host_vars/bastion-zvm.yaml"
+  tasks:
+    - name: Wait for bastion SSH to be available
+      wait_for:
+        host: "{{ host_ip }}"
+        port: 22
+        delay: 30
+        timeout: 600
+        msg: "Bastion SSH not available after 10 minutes"
+
+    - name: Test SSH connection to bastion
+      shell: |
+        sshpass -p "{{ node_user_pwd }}" ssh -o StrictHostKeyChecking=no \
+        {{ node_user }}@{{ host_ip }} "hostname"
+      register: bastion_hostname
+      retries: 5
+      delay: 10
+      until: bastion_hostname.rc == 0
+      changed_when: false
+
+    - name: Display bastion hostname
+      debug:
+        msg: "Bastion is accessible. Hostname: {{ bastion_hostname.stdout }}"
+
+- name: 1 create zvm bastion - Add bastion to inventory
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/host_vars/bastion-zvm.yaml"
+  tasks:
+    - name: Add bastion to in-memory inventory
+      add_host:
+        name: "{{ ocp_nodename }}"
+        groups: bastion_zvm
+        ansible_host: "{{ host_ip }}"
+        ansible_user: "{{ node_user }}"
+        ansible_password: "{{ node_user_pwd }}"
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+    - name: Display bastion creation summary
+      debug:
+        msg:
+          - "=== Bastion Creation Complete ==="
+          - "✓ Bastion guest created on z/VM"
+          - "✓ Guest Name: {{ zvm_guest }}"
+          - "✓ IP Address: {{ host_ip }}"
+          - "✓ SSH accessible"
+          - "✓ Added to inventory as: {{ ocp_nodename }}"
+          - ""
+          - "Ready to proceed with bastion setup (2_setup_zvm_bastion.yaml)"
+
+- name: 1 create zvm bastion - Copy Ansible SSH key to bastion
+  hosts: bastion_zvm
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Ensure .ssh directory exists
+      file:
+        path: "/home/{{ ansible_user }}/.ssh"
+        state: directory
+        mode: '0700'
+        owner: "{{ ansible_user }}"
+      become: true
+
+    - name: Copy Ansible public key to bastion
+      authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', '~/.ssh/{{ env.ansible_key_name }}.pub') }}"
+        state: present
+      become: true
+
+    - name: Test passwordless SSH
+      ping:
+
+    - name: Display SSH key setup result
+      debug:
+        msg: "✓ Ansible SSH key configured on bastion"
+
+# Made with Bob

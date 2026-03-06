@@ -12,14 +12,20 @@ installation_type: zvm
 # Section 2 - Ansible Controller
 controller_sudo_pass: #X
 
-env:
-  # Section 3 - z/VM Hypervisor Configuration
-  zvm_host:
-    hostname: #X  # z/VM LPAR hostname or IP
-    ip: #X        # z/VM LPAR IP address
-    user: #X      # z/VM administrator user
-    pass: #X      # z/VM administrator password (consider using vault)
+  # Section 3 - z/VM Nodes List
+  # List all z/VM nodes to be created. Credentials are read from host_vars/{node}.yaml
+  zvm_nodes:
+    - bastion-zvm
+    - bootstrap-zvm
+    - control-1-zvm
+    - control-2-zvm
+    - control-3-zvm
+    - compute-1-zvm
+    # Add more compute nodes as needed:
+    # - compute-2-zvm
+    # - compute-3-zvm
 
+env:
   # Section 4 - File Server (for RHEL/RHCOS ISOs and artifacts)
   file_server:
     ip: #X
@@ -39,7 +45,7 @@ env:
     # Make sure to enclose pull_secret in 'single quotes'
     pull_secret: #'X'
 
-  # Section 6 - Cluster Networking (Global)
+  # Section 5 - Cluster Networking (Global)
   cluster:
     networking:
       metadata_name: #X  # e.g., ocp-zvm
@@ -53,21 +59,11 @@ env:
       forwarder: 1.1.1.1
       interface: #X  # Default interface name (e.g., enc1000)
 
-  # Section 7 - z/VM Global Configuration
-  zvm:
-    network_mode: #X  # Supported modes: vswitch, osa, roce, hipersockets
-    disk_type: #X     # Supported types: dasd, fcp
-    subnetmask: #X
-    gateway: #X
-    nameserver: #X
-    vcpus: 4          # Default vCPUs per guest
-    memory: 16384     # Default memory (MB) per guest
-
 #######################################################################################
 # All variables below this point do not need to be changed for a default installation #
 #######################################################################################
 
-  # Section 8 - Miscellaneous
+  # Section 6 - Miscellaneous
   language: en_US.UTF-8
   timezone: America/New_York
   keyboard: us
@@ -77,21 +73,21 @@ env:
   use_ipv6: True
   use_dhcp: False
 
-  # Section 9 - OCP Version and Download
+  # Section 7 - OCP Version and Download
   ocp:
     version: 4.19.0
     download_url: https://mirror.openshift.com/pub/openshift-v4
 
-# Section 10 - CEX based Luks Encryption (Optional)
+# Section 8 - CEX based Luks Encryption (Optional)
 cex: false
 # cex_device: [dasd | fcp | virt]
 
-# Section 11 - Disconnected/Air-gapped (Optional)
+# Section 9 - Disconnected/Air-gapped (Optional)
 # See disconnected.yaml for full configuration
 # disconnected:
 #   enabled: false
 
-# Section 12 - Proxy (Optional)
+# Section 10 - Proxy (Optional)
 # use_proxy: false
 # proxy_http:
 # proxy_https:

@@ -1,0 +1,37 @@
+---
+# Role: validate_zvm_connection
+# Purpose: Test z/VM hypervisor connectivity using tessia-baselib
+# Variables expected: node_name, node_zvm_host, node_zvm_user, node_zvm_pass, node_zvm_guest
+
+- name: Display node being tested
+  debug:
+    msg: "Testing z/VM connectivity for {{ node_name }} ({{ node_zvm_guest }} on {{ node_zvm_host }})"
+
+- name: Create temporary directory for z/VM test script
+  file:
+    path: /tmp/zvm_test
+    state: directory
+    mode: '0755'
+
+- name: Generate z/VM connection test script for {{ node_name }}
+  template:
+    src: test_zvm_connection.py.j2
+    dest: "/tmp/zvm_test/test_zvm_{{ node_name }}.py"
+    mode: '0755'
+
+- name: Test z/VM hypervisor connection for {{ node_name }}
+  command: "python3 /tmp/zvm_test/test_zvm_{{ node_name }}.py"
+  register: zvm_connection_test
+  changed_when: false
+  failed_when: zvm_connection_test.rc != 0
+
+- name: Display z/VM connection test result for {{ node_name }}
+  debug:
+    msg: "{{ zvm_connection_test.stdout_lines }}"
+
+- name: Clean up test script for {{ node_name }}
+  file:
+    path: "/tmp/zvm_test/test_zvm_{{ node_name }}.py"
+    state: absent
+
+# Made with Bob

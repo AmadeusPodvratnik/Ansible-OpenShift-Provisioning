@@ -1,0 +1,194 @@
+---
+# 0_setup_zvm.yaml - Initial setup and prerequisites for z/VM UPI deployment
+# This playbook prepares the Ansible controller and validates the z/VM environment
+
+- name: 0 setup zvm - Generate SSH keys and validate environment
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Validate installation type
+      assert:
+        that:
+          - installation_type is defined
+          - installation_type | lower == 'zvm'
+        fail_msg: "installation_type must be set to 'zvm' in group_vars/all.yaml"
+        success_msg: "Installation type validated: {{ installation_type }}"
+
+    - name: Validate cluster configuration
+      assert:
+        that:
+          - env.cluster.networking.metadata_name is defined
+          - env.cluster.networking.base_domain is defined
+        fail_msg: "Cluster networking configuration missing"
+        success_msg: "Cluster configuration validated"
+
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "=== z/VM UPI Deployment Setup ==="
+          - "Installation Type: {{ installation_type }}"
+          - "Cluster Name: {{ env.cluster.networking.metadata_name }}"
+          - "Base Domain: {{ env.cluster.networking.base_domain }}"
+
+- name: 0 setup zvm - Generate Ansible SSH keys
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  roles:
+    - ssh_key_gen
+
+- name: 0 setup zvm - Generate OpenShift SSH keys
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  roles:
+    - ssh_ocp_key_gen
+
+- name: 0 setup zvm - Test z/VM hypervisor connectivity for all nodes
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tags:
+    - validate_zvm_connection
+  tasks:
+    - name: Display z/VM connectivity test summary
+      debug:
+        msg:
+          - "=== Testing z/VM Connectivity ==="
+          - "Nodes to test: {{ zvm_nodes | length }}"
+          - "{{ zvm_nodes }}"
+
+    - name: Test z/VM connectivity for each node
+      include_role:
+        name: validate_zvm_connection
+      vars:
+        node_name: "{{ item }}"
+        node_zvm_host: "{{ hostvars[item].zvm_host }}"
+        node_zvm_user: "{{ hostvars[item].zvm_user }}"
+        node_zvm_pass: "{{ hostvars[item].zvm_pass }}"
+        node_zvm_guest: "{{ hostvars[item].zvm_guest }}"
+      loop: "{{ zvm_nodes }}"
+      loop_control:
+        label: "{{ item }}"
+
+- name: 0 setup zvm - Install prerequisites on Ansible controller
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Install required Python packages
+      pip:
+        name:
+          - tessia-baselib  # For z/VM guest management
+          - pyyaml
+          - jinja2
+        state: present
+      become: true
+      when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+
+    - name: Install required system packages
+      package:
+        name:
+          - python3-pip
+          - git
+        state: present
+      become: true
+      when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+
+- name: 0 setup zvm - Validate node configurations
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Check for bastion host_vars file
+      stat:
+        path: "{{ inventory_dir }}/host_vars/bastion-zvm.yaml"
+      register: bastion_config
+      failed_when: not bastion_config.stat.exists
+      
+    - name: Check for bootstrap host_vars file
+      stat:
+        path: "{{ inventory_dir }}/host_vars/bootstrap-zvm.yaml"
+      register: bootstrap_config
+      failed_when: not bootstrap_config.stat.exists
+
+    - name: Find control node host_vars files
+      find:
+        paths: "{{ inventory_dir }}/host_vars/"
+        patterns: "control-*-zvm.yaml"
+      register: control_configs
+
+    - name: Validate control node count
+      assert:
+        that:
+          - control_configs.matched >= 3
+        fail_msg: "At least 3 control nodes required. Found {{ control_configs.matched }}"
+        success_msg: "Found {{ control_configs.matched }} control node configurations"
+
+    - name: Find compute node host_vars files
+      find:
+        paths: "{{ inventory_dir }}/host_vars/"
+        patterns: "compute-*-zvm.yaml"
+      register: compute_configs
+
+    - name: Validate compute node count
+      assert:
+        that:
+          - compute_configs.matched >= 2
+        fail_msg: "At least 2 compute nodes required. Found {{ compute_configs.matched }}"
+        success_msg: "Found {{ compute_configs.matched }} compute node configurations"
+
+    - name: Display node configuration summary
+      debug:
+        msg:
+          - "=== Node Configuration Summary ==="
+          - "Bastion: ✓"
+          - "Bootstrap: ✓"
+          - "Control Nodes: {{ control_configs.matched }}"
+          - "Compute Nodes: {{ compute_configs.matched }}"
+          - "Total Nodes: {{ 2 + control_configs.matched + compute_configs.matched }}"
+
+- name: 0 setup zvm - Create working directories
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+  tasks:
+    - name: Create Ansible working directory
+      file:
+        path: "{{ playbook_dir }}/../ansible_workdir"
+        state: directory
+        mode: '0755'
+
+    - name: Create ignition configs directory
+      file:
+        path: "{{ playbook_dir }}/../ansible_workdir/ignition"
+        state: directory
+        mode: '0755'
+
+    - name: Create parm files directory
+      file:
+        path: "{{ playbook_dir }}/../ansible_workdir/parm_files"
+        state: directory
+        mode: '0755'
+
+    - name: Display setup completion
+      debug:
+        msg:
+          - "=== Setup Complete ==="
+          - "✓ SSH keys generated"
+          - "✓ z/VM connectivity verified"
+          - "✓ Prerequisites installed"
+          - "✓ Node configurations validated"
+          - "✓ Working directories created"
+          - ""
+          - "Ready to proceed with bastion creation (1_create_zvm_bastion.yaml)"
+
+# Made with Bob

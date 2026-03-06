@@ -1,0 +1,72 @@
+---
+# Role: create_zvm_bastion
+# Purpose: Create and provision bastion VM on z/VM using tessia-baselib
+# This role creates the z/VM guest, attaches storage and network, and prepares for OS installation
+
+- name: Display bastion creation summary
+  debug:
+    msg:
+      - "=== Creating Bastion VM on z/VM ==="
+      - "z/VM Hypervisor: {{ zvm_host }}"
+      - "Guest Name: {{ zvm_guest }}"
+      - "z/VM User: {{ zvm_user }}"
+      - "CPU: {{ cpu }}"
+      - "Memory: {{ memory }} MB"
+      - "IP Address: {{ host_ip }}"
+
+- name: Create temporary directory for z/VM scripts
+  file:
+    path: /tmp/zvm_bastion
+    state: directory
+    mode: '0755'
+
+- name: Generate z/VM guest creation script
+  template:
+    src: create_zvm_guest.py.j2
+    dest: /tmp/zvm_bastion/create_bastion.py
+    mode: '0755'
+
+- name: Create z/VM guest for bastion
+  command: python3 /tmp/zvm_bastion/create_bastion.py
+  register: guest_creation
+  failed_when: guest_creation.rc != 0
+
+- name: Display guest creation result
+  debug:
+    msg: "{{ guest_creation.stdout_lines }}"
+
+- name: Wait for guest to be ready
+  pause:
+    seconds: 10
+    prompt: "Waiting for z/VM guest to initialize..."
+
+- name: Verify guest status
+  template:
+    src: check_guest_status.py.j2
+    dest: /tmp/zvm_bastion/check_status.py
+    mode: '0755'
+
+- name: Check if guest is active
+  command: python3 /tmp/zvm_bastion/check_status.py
+  register: guest_status
+  failed_when: guest_status.rc != 0
+
+- name: Display guest status
+  debug:
+    msg: "{{ guest_status.stdout_lines }}"
+
+- name: Clean up temporary scripts
+  file:
+    path: /tmp/zvm_bastion
+    state: absent
+  when: guest_creation.rc == 0
+
+- name: Bastion creation complete
+  debug:
+    msg:
+      - "✓ Bastion VM created successfully on z/VM"
+      - "Guest: {{ zvm_guest }}"
+      - "Next step: Install RHEL OS on the bastion"
+      - "You can access the guest console via z/VM"
+
+# Made with Bob
