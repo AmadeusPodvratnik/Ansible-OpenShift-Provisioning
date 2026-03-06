@@ -1,0 +1,62 @@
+##############################################################
+# Control node 1 configuration for z/VM UPI deployment
+# Based on node.yaml.template
+# Copy and rename this template for each control node.
+# Create control-2-zvm.yaml and control-3-zvm.yaml with similar structure.
+##############################################################
+
+# Section 1 - General Settings
+ocp_nodename: control-1  # OpenShift/DNS hostname (e.g., control-1.ocp.example.com)
+zvm_guest: CONTROL1      # z/VM guest name (max 8 chars, uppercase)
+host_ip: #X              # IP address of this control node (e.g., 192.168.1.31)
+node_user: core          # User to login to this node (RHCOS default is 'core')
+node_user_pwd: "{{ vault_core_pwd }}"  # Password (use vault)
+
+# Section 2 - z/VM Hypervisor and Guest Credentials
+# This node will be created on this z/VM hypervisor
+zvm_host: #X      # z/VM hypervisor hostname/IP (e.g., zvm.example.com)
+zvm_user: CONTROL1  # z/VM user that owns this guest (same as zvm_guest)
+zvm_pass: #X      # z/VM user password (use vault: "{{ vault_zvm_control1_pwd }}")
+
+# Section 3 - Hardware settings
+attach_network: True
+attach_disk: True
+cpu: 4           # Number of vCPUs for control plane
+memory: 16384    # Memory in MB for control plane (16GB recommended)
+zfcp_allow_lun_scan: 0
+
+# Section 4 - Storage Configuration
+# Choose DASD or FCP based on your z/VM storage setup
+
+# For DASD storage (Direct Access Storage Device)
+zrd_dasd:
+  - #X  # DASD device number (e.g., 0.0.0300) - 120GB required for control plane
+
+# For FCP storage (Fibre Channel Protocol) - leave empty if using DASD
+zrd_fcp: []
+#  - #X  # FCP adapter (e.g., 0.0.1a00)
+
+# Section 5 - Network Configuration
+# Network device subchannels for OSA/vSwitch/Hipersockets
+zrd_znet:
+  - #X  # Subchannels (e.g., 0.0.3000,0.0.3001,0.0.3002)
+
+# Network interface settings
+network:
+  - ip: #X          # IPv4 address (e.g., 192.168.1.31)
+    ipv6: #X        # IPv6 address (e.g., fd00::31) or leave empty
+    gateway: #X     # IPv4 gateway (e.g., 192.168.1.1)
+    gatewayv6: #X   # IPv6 gateway (e.g., fd00::1) or leave empty
+    netmask: #X     # IPv4 netmask (e.g., 255.255.255.0)
+    netmaskv6: #X   # IPv6 prefix length (e.g., 64) or leave empty
+    device: #X      # Network device name (e.g., enc3000)
+
+# Section 6 - DNS Configuration
+nameserver:
+  - #X  # Primary DNS - should point to bastion (e.g., 192.168.1.20)
+  - #X  # Secondary DNS (optional)
+
+# Section 7 - Control Plane Role
+# This node is part of the OpenShift control plane
+node_role: control
+ignition_type: master  # Will use master.ign

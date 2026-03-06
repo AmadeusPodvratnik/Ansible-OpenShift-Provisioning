@@ -1,0 +1,16 @@
+# Master playbook for z/VM UPI deployment
+# This playbook orchestrates the complete OpenShift cluster deployment on IBM z/VM
+---
+
+- import_playbook: 0_setup_zvm.yaml
+- import_playbook: 1_create_zvm_bastion.yaml
+- import_playbook: 2_setup_zvm_bastion.yaml
+- import_playbook: disconnected_mirror_artifacts.yaml
+  when: disconnected.enabled | default(false)
+- import_playbook: 3_prepare_zvm_guests.yaml
+- import_playbook: 4_create_zvm_nodes.yaml
+- import_playbook: 5_verify_zvm_cluster.yaml
+- import_playbook: disconnected_apply_operator_manifests.yaml
+  when: disconnected.enabled | default(false)
+
+# Made with Bob

@@ -1,0 +1,64 @@
+##############################################################
+# Bastion node configuration for z/VM UPI deployment
+# Based on node.yaml.template
+# Copy and rename this template for your bastion node.
+##############################################################
+
+# Section 1 - General Settings
+ocp_nodename: bastion  # OpenShift/DNS hostname (e.g., bastion.ocp.example.com)
+zvm_guest: BASTION     # z/VM guest name (max 8 chars, uppercase)
+host_ip: #X            # IP address of this bastion node (e.g., 192.168.1.20)
+node_user: root        # User to login to this node after creation
+node_user_pwd: "{{ vault_bastion_pwd }}"  # Password (use vault)
+
+# Section 2 - z/VM Hypervisor and Guest Credentials
+# This node will be created on this z/VM hypervisor
+zvm_host: #X  # z/VM hypervisor hostname/IP (e.g., zvm.example.com)
+zvm_user: BASTION  # z/VM user that owns this guest (same as zvm_guest)
+zvm_pass: #X   # z/VM user password (use vault: "{{ vault_zvm_bastion_pwd }}")
+
+# Section 3 - Hardware settings
+attach_network: True
+attach_disk: True
+cpu: 4           # Number of vCPUs for bastion
+memory: 8192     # Memory in MB for bastion
+zfcp_allow_lun_scan: 0
+
+# Section 4 - Storage Configuration
+# Choose DASD or FCP based on your z/VM storage setup
+
+# For DASD storage (Direct Access Storage Device)
+zrd_dasd:
+  - #X  # DASD device number (e.g., 0.0.0100) - 30GB recommended for bastion
+
+# For FCP storage (Fibre Channel Protocol) - leave empty if using DASD
+zrd_fcp: []
+#  - #X  # FCP adapter (e.g., 0.0.1a00)
+
+# Section 5 - Network Configuration
+# Network device subchannels for OSA/vSwitch/Hipersockets
+zrd_znet:
+  - #X  # Subchannels (e.g., 0.0.1000,0.0.1001,0.0.1002)
+
+# Network interface settings
+network:
+  - ip: #X          # IPv4 address (e.g., 192.168.1.20)
+    ipv6: #X        # IPv6 address (e.g., fd00::20) or leave empty
+    gateway: #X     # IPv4 gateway (e.g., 192.168.1.1)
+    gatewayv6: #X   # IPv6 gateway (e.g., fd00::1) or leave empty
+    netmask: #X     # IPv4 netmask (e.g., 255.255.255.0)
+    netmaskv6: #X   # IPv6 prefix length (e.g., 64) or leave empty
+    device: #X      # Network device name (e.g., enc1000)
+
+# Section 6 - DNS Configuration
+nameserver:
+  - #X  # Primary DNS (e.g., 8.8.8.8)
+  - #X  # Secondary DNS (e.g., 8.8.4.4)
+
+# Section 7 - Bastion Services
+# These services will be configured on the bastion by setup playbooks
+bastion_services:
+  dns: True       # Run DNS server (bind)
+  haproxy: True   # Run load balancer
+  httpd: True     # Run HTTP server for ignition/RHCOS
+  firewalld: True # Configure firewall

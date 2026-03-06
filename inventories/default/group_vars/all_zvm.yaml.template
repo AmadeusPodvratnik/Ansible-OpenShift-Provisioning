@@ -1,0 +1,102 @@
+# Copy this file to 'all.yaml' in the same folder and add your required values there !
+#
+# z/VM UPI Deployment Configuration
+# For detailed documentation, see: docs/zvm-upi-implementation-plan.md
+#
+# This file contains ONLY cluster-wide and z/VM hypervisor settings.
+# Individual node configurations are in host_vars/ directory.
+
+# Section 1 - Installation Type
+installation_type: zvm
+
+# Section 2 - Ansible Controller
+controller_sudo_pass: #X
+
+env:
+  # Section 3 - z/VM Hypervisor Configuration
+  zvm_host:
+    hostname: #X  # z/VM LPAR hostname or IP
+    ip: #X        # z/VM LPAR IP address
+    user: #X      # z/VM administrator user
+    pass: #X      # z/VM administrator password (consider using vault)
+
+  # Section 4 - File Server (for RHEL/RHCOS ISOs and artifacts)
+  file_server:
+    ip: #X
+    port: '' # please keep empty string to use default port
+    user: #X
+    pass: #X
+    protocol: #X  # http, ftp, nfs
+    iso_mount_dir: #X
+    iso_os_variant: #X
+    cfgs_dir: #X
+
+  # Section 5 - Red Hat Credentials
+  redhat:
+    username: #X
+    password: #X
+    manage_subscription: True
+    # Make sure to enclose pull_secret in 'single quotes'
+    pull_secret: #'X'
+
+  # Section 6 - Cluster Networking (Global)
+  cluster:
+    networking:
+      metadata_name: #X  # e.g., ocp-zvm
+      base_domain: #X    # e.g., example.com
+      subnetmask: #X
+      gateway: #X
+      ipv6_gateway: #X
+      ipv6_prefix: #X
+      nameserver1: #X
+#      nameserver2:
+      forwarder: 1.1.1.1
+      interface: #X  # Default interface name (e.g., enc1000)
+
+  # Section 7 - z/VM Global Configuration
+  zvm:
+    network_mode: #X  # Supported modes: vswitch, osa, roce, hipersockets
+    disk_type: #X     # Supported types: dasd, fcp
+    subnetmask: #X
+    gateway: #X
+    nameserver: #X
+    vcpus: 4          # Default vCPUs per guest
+    memory: 16384     # Default memory (MB) per guest
+
+#######################################################################################
+# All variables below this point do not need to be changed for a default installation #
+#######################################################################################
+
+  # Section 8 - Miscellaneous
+  language: en_US.UTF-8
+  timezone: America/New_York
+  keyboard: us
+  root_access: false
+  ansible_key_name: ansible-ocpz
+  ocp_ssh_key_comment: OpenShift key
+  use_ipv6: True
+  use_dhcp: False
+
+  # Section 9 - OCP Version and Download
+  ocp:
+    version: 4.19.0
+    download_url: https://mirror.openshift.com/pub/openshift-v4
+
+# Section 10 - CEX based Luks Encryption (Optional)
+cex: false
+# cex_device: [dasd | fcp | virt]
+
+# Section 11 - Disconnected/Air-gapped (Optional)
+# See disconnected.yaml for full configuration
+# disconnected:
+#   enabled: false
+
+# Section 12 - Proxy (Optional)
+# use_proxy: false
+# proxy_http:
+# proxy_https:
+# proxy_no:
+
+# Note: Individual node configurations (bastion, bootstrap, control, compute)
+# are defined in separate files in inventories/default/host_vars/
+# Each node file is based on node.yaml.template structure.
