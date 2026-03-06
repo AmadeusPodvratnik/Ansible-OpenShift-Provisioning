@@ -1,0 +1,36 @@
+##############################################################
+# Copy and rename this template for your node.               #
+# Note:                                                      # 
+# You can add entries to the secrets file for passwords and  #
+# replace the vault_node_xxxx entries accordingly.           #
+##############################################################
+
+# Section 1 - General Settings
+hostname: #x
+nodename: #x
+host_ip: #x
+node_user: #x
+node_user_pwd:  "{{ vault_node_user_pwd }}"
+
+# Section 2 - Hardware settings
+attach_network: True
+attach_disk: True
+cpu: #x
+memory: #x
+zfcp_allow_lun_scan: 0
+zrd_fcp: 
+    - #x
+zrd_dasd:
+    - #x
+zrd_znet:
+    - #x
+network:
+    - ip: #x
+      ipv6: #x
+      gateway: #x
+      gatewayv6: #x
+      netmask: #x
+      netmaskv6: #x
+      device: #x
+nameserver:
+    - #x      
