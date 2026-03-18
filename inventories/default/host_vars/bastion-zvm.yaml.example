@@ -1,0 +1,109 @@
+##############################################################
+# Bastion node configuration for z/VM UPI deployment - EXAMPLE
+# This is a complete example showing actual values
+# Copy bastion-zvm.yaml.template and fill in your values
+# Assisted by Bob
+##############################################################
+
+# Section 1 - General Settings
+zvm_guest: BASTION1     # z/VM guest name (max 8 chars, uppercase)
+host_ip: 192.168.100.20 # IP address of this bastion node
+node_user: root         # User to login to this node after creation
+node_user_pwd: "{{ vault_bastion_pass }}"  # Password (use vault)
+create_bastion: True    # Create this node as a bastion node?
+
+# Section 2 - z/VM Hypervisor and Guest Credentials
+# This node will be created on this z/VM hypervisor
+zvm_host: zvm01.example.com  # z/VM hypervisor hostname/IP
+zvm_user: BASTION1           # z/VM user that owns this guest (same as zvm_guest)
+zvm_pass: "{{ vault_zvm_bastion_pwd }}" # z/VM user password (use vault)
+hostname: bastion1.ocp4.example.com # FQN - used to setup the hostname of the node
+
+# Section 3 - Hardware settings
+attach_network: True
+attach_disk: True
+cpu: 4           # Number of vCPUs for bastion
+memory: 8192     # Memory in MB for bastion
+
+# ZFCP LUN scan setting (0 = disabled, 1 = enabled)
+# Default is disabled for security
+zfcp_allow_lun_scan: 0
+
+# Section 4 - Storage Configuration
+# Choose DASD or FCP based on your z/VM storage setup
+
+# Example 1: Using DASD storage (Direct Access Storage Device)
+# Uncomment and use this if you have DASD storage
+# zrd_dasd:
+#   - 0.0.0100  # DASD device number - 30GB recommended for bastion
+#   - 0.0.0101  # Additional DASD if needed
+# zrd_fcp: []
+# install_disk: dasda
+
+# Example 2: Using FCP storage (Fibre Channel Protocol) with multipath
+# This example shows FCP with two paths for redundancy
+zrd_dasd:
+  - #X  # Not using DASD, so placeholder
+zrd_fcp: 
+  - 0.0.8001,0x500507630400d1e3,0x4000404500000000  # FCP adapter,WWPN,LUN
+  - 0.0.8101,0x500507630400d1e3,0x4000404500000000  # Second path for multipath
+install_disk: mpatha # Multipath device name
+
+# Example 3: Using FCP storage with single path
+# zrd_dasd:
+#   - #X
+# zrd_fcp:
+#   - 0.0.8001,0x500507630400d1e3,0x4000404500000000
+# install_disk: sda
+
+# Section 5 - Network Configuration
+# network mode could be osa, vswitch, roce or hipersockets
+zrd_network_mode: osa
+
+# Network device subchannels for OSA/vSwitch/Hipersockets
+zrd_znet:
+  - qeth,0.0.1000,0.0.1001,0.0.1002,layer2=1 
+
+# Network interface settings
+# Example with single interface
+network:
+  - ip: 192.168.100.20      # IPv4 address
+    ipv6: #X                # IPv6 address or #X if not using
+    gateway: 192.168.100.1  # IPv4 gateway
+    gatewayv6: #X           # IPv6 gateway or #X if not using
+    netmask: 255.255.255.0  # IPv4 netmask
+    netmaskv6: #X           # IPv6 prefix length or #X if not using
+    device: enc1000         # Network device name (enc + first subchannel)
+
+# Example with multiple interfaces (uncomment to use)
+# network:
+#   - ip: 192.168.100.20
+#     ipv6: fd00::20
+#     gateway: 192.168.100.1
+#     gatewayv6: fd00::1
+#     netmask: 255.255.255.0
+#     netmaskv6: 64
+#     device: enc1000
+#   - ip: 10.0.0.20
+#     ipv6: #X
+#     gateway: 10.0.0.1
+#     gatewayv6: #X
+#     netmask: 255.255.255.0
+#     netmaskv6: #X
+#     device: enc2000
+
+# Section 6 - DNS Configuration
+nameserver:
+  - 8.8.8.8      # Primary DNS
+  - 8.8.4.4      # Secondary DNS
+
+# Section 7 - Bastion Services
+# These services will be configured on the bastion by setup playbooks
+bastion_services:
+  dns: True       # Run DNS server (bind)
+  haproxy: True   # Run load balancer
+  httpd: True     # Run HTTP server for ignition/RHCOS
+  firewalld: True # Configure firewall
+
+# Additional parameters used to boot the node
+additonal_params: "rd.neednet=1 rd.luks.options=discard cio_ignore=all,!condev"

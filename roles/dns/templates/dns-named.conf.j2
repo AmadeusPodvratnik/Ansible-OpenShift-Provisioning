@@ -18,7 +18,11 @@ options {
 	secroots-file	"/var/named/data/named.secroots";
 	recursing-file	"/var/named/data/named.recursing";
 	allow-query     { any; };
-	forwarders { {{ env.bastion.networking.nameserver2}}; {{ env.cluster.networking.forwarder }}; };
+{% if installation_type | lower == 'zvm' %}
+	forwarders { {% if nameserver is defined and nameserver | length > 1 and nameserver[1] is defined and nameserver[1] != '#X' %}{{ nameserver[1] }}; {% endif %}{{ env.cluster.networking.forwarder }}; };
+{% else %}
+	forwarders { {% if env.bastion.networking.nameserver2 is defined %}{{ env.bastion.networking.nameserver2}}; {% endif %}{{ env.cluster.networking.forwarder }}; };
+{% endif %}
 
 	/*
 	 - If you are building an AUTHORITATIVE DNS server, do NOT enable recursion.
@@ -69,12 +73,24 @@ zone "{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_
      allow-query { any; };
 };
 
+{% if installation_type | lower == 'zvm' %}
+{# For zVM installations, use second nameserver from nameserver list if it exists #}
+{% if nameserver is defined and nameserver | length > 1 and nameserver[1] is defined and nameserver[1] != '#X' %}
+// forwared zone
+zone "{{ env.cluster.networking.base_domain }}" IN {
+     type forward;
+     forwarders { {{ nameserver[1] }}; };
+};
+{% endif %}
+{% else %}
+{# For KVM installations, use env.bastion.networking.nameserver2 #}
 {% if env.bastion.networking.nameserver2 is defined %}
 // forwared zone
 zone "{{ env.cluster.networking.base_domain }}" IN {
      type forward;
-     forwarders { {{ env.bastion.networking.nameserver2}} ;};
+     forwarders { {{ env.bastion.networking.nameserver2}}; };
 };
+{% endif %}
 {% endif %}
 
 //backward zone

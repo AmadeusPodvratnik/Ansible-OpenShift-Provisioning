@@ -1,0 +1,138 @@
+# Template for bastion kickstart configuration file. Some parts come from the create_bastion role.
+# This kickstart file was tested with RHEL 9.2 and 9.3
+
+# Use command line mode for fully automated installation
+cmdline
+
+# Shutdown after installation
+reboot
+
+# Use text mode install
+text
+
+# Run the Setup Agent on first boot
+firstboot --enable
+
+# Use network installation
+url --url={{ env.file_server.protocol }}://{{ env.file_server.user + ':' + env.file_server.pass + '@' if env.file_server.protocol == 'ftp' else '' }}{{ env.file_server.ip }}{{ ':' + env.file_server.port if env.file_server.port | default('') | length > 0 else '' }}/{{ env.file_server.iso_mount_dir }}
+
+# Add yum repositories
+repo --install --name="AppStream" --baseurl={{ env.file_server.protocol }}://{{ env.file_server.user + ':' + env.file_server.pass + '@' if env.file_server.protocol == 'ftp' else '' }}{{ env.file_server.ip }}{{ ':' + env.file_server.port if env.file_server.port | default('') | length > 0 else '' }}/{{ env.file_server.iso_mount_dir }}/AppStream/
+repo --install --name="BaseOS" --baseurl={{ env.file_server.protocol }}://{{ env.file_server.user + ':' + env.file_server.pass + '@' if env.file_server.protocol == 'ftp' else '' }}{{ env.file_server.ip }}{{ ':' + env.file_server.port if env.file_server.port | default('') | length > 0 else '' }}/{{ env.file_server.iso_mount_dir }}/BaseOS/
+
+# Keyboard layouts
+keyboard --vckeymap={{ env.keyboard }} --xlayouts='{{ env.keyboard }}'
+
+# System language
+lang {{ env.language }}
+
+# System timezone
+timezone {{ env.timezone }}
+
+# Mark the End-User License Agreement (EULA) as agreed
+eula --agreed
+
+# Network information
+{% for net in network %}
+network --bootproto=static --device={{ net.device }} --ip={{ net.ip }} --gateway={{ net.gateway }} --netmask={{ net.netmask }} {{'--ipv6=' + net.ipv6 if net.ipv6 is defined and net.ipv6 is not none and net.ipv6 | length > 0 else '--noipv6' }} {{'--ipv6gateway=' + net.gatewayv6 if net.gatewayv6 is defined and net.gatewayv6 is not none and net.gatewayv6 | length > 0 else '' }} --nameserver={{ nameserver[0] }}{{ (',' + nameserver[1]) if nameserver | length > 1 else '' }} --activate
+{% endfor %}
+network --hostname={{ hostname }}
+
+# Firewall and SELinux
+firewall --enabled --http --ftp --smtp --ssh --port=443,9090
+selinux --permissive
+
+# Root password
+rootpw --iscrypted {{ node_user_pwd | password_hash('sha512') }}
+
+# Users and Groups Definitions
+user --name={{ node_user }} --password={{ node_user_pwd | password_hash('sha512') }} --iscrypted --groups=wheel
+
+# The following is the partition information you requested
+{% if disk_type == 'FCP' %}
+ignoredisk --only-use={{ install_disk}}
+{% else %}
+ignoredisk --only-use={{ install_disk}}
+{% endif %}
+
+# Initialize disk label
+zerombr
+
+# System bootloader configuration
+{% if disk_type == 'FCP' %}
+bootloader --append="crashkernel=auto" --location=mbr --boot-drive={{ install_disk}}
+{% else %}
+bootloader --append="crashkernel=auto" --location=mbr --boot-drive={{ install_disk}}
+{% endif %}
+
+# Partition clearing information
+{% if disk_type == 'FCP' %}
+clearpart --all --initlabel --drives={{ install_disk}}
+{% else %}
+clearpart --all --initlabel --drives={{ install_disk}}
+{% endif %}
+
+# Disk partitioning information
+{% if install_config_vars is defined and install_config_vars.control.architecture == 'arm64' %}
+# TODO: Special setup for arm required, because our arm server requires /boot/efi partition with efi file system
+ignoredisk --only-use=vda
+# System bootloader configuration
+bootloader --location=mbr --boot-drive=vda
+autopart
+{% else %}
+{% if disk_type == 'FCP' %}
+part /boot --fstype="xfs" --asprimary --ondisk={{ install_disk}} --size=1024
+part pv.01 --fstype="lvmpv" --grow --size=1 --ondisk={{ install_disk}}
+{% else %}
+part /boot --fstype="xfs" --asprimary --ondisk={{ install_disk}} --size=1024
+part pv.01 --fstype="lvmpv" --grow --size=1 --ondisk={{ install_disk}}
+{% endif %}
+volgroup vgsystem --pesize=4096 pv.01
+logvol swap --fstype=swap --name=swap --vgname=vgsystem --size={{ env.bastion.resources.swap }}
+logvol / --fstype=xfs --name=root --vgname=vgsystem --size=1 --grow
+{% endif %}
+
+# Packages selection
+%packages --multilib --ignoremissing
+@^minimal-environment
+# Add required Bastion DNS, http and haproxy packages
+bind
+bind-utils
+expect
+haproxy
+httpd
+jq
+libosinfo
+net-tools
+python3-pip
+rsync
+vim
+# Add required python packages to build cryptography python module
+openssl-devel
+python3-devel
+redhat-rpm-config
+gcc
+libffi-devel
+cargo
+pkg-config
+%end
+
+%addon com_redhat_kdump --disable
+%end
+
+%post --log=/root/post.log
+#!/usr/bin/env bash
+
+# Allow root login, required change for RHEL9
+sed -i -e '/PermitRootLogin/ c\PermitRootLogin yes' /etc/ssh/sshd_config
+
+# Basic /root/.ssh/config setup
+echo "UserKnownHostsFile=/dev/null" >> /root/.ssh/config
+echo "StrictHostKeyChecking=no" >> /root/.ssh/config
+
+# Yum repository configuration adjustments
+echo "gpgcheck=0" >> /etc/yum.repos.d/AppStream.repo
+echo "skip_if_unavailable=True" >> /etc/yum.repos.d/AppStream.repo
+echo "gpgcheck=0" >> /etc/yum.repos.d/BaseOS.repo
+echo "skip_if_unavailable=True" >> /etc/yum.repos.d/BaseOS.repo
+%end

@@ -92,6 +92,71 @@ Creates the bastion KVM guest on the first KVM host. The bastion hosts essential
 * This can be a particularly sticky part of the process.
 * If any of the variables used in the virt-install or kickstart are off, the bastion won't be able to boot.
 * Recommend watching it come up from the first KVM host's cockpit. Go to http://kvm-ip-here:9090 via web-browser to view it. You'll have to sign in, enable administrative access (top right), and then click on the virtual machines tab on the left-hand toolbar.
+
+## 4 Create Bastion on zVM Playbook (4_create_bastion_zvm.yaml)
+### Overview
+Creates the bastion node on an existing zVM guest using Tessia base library. This playbook is specifically for zVM-based installations where the bastion runs directly on z/VM instead of as a KVM guest. The bastion hosts essential services for the cluster.
+
+### Prerequisites
+* `installation_type: zvm` must be set in group_vars/all.yaml
+* zVM guest must already exist and be accessible
+* Tessia base library must be available
+* File server must be configured and accessible
+* bastion-zvm.yaml host_vars file must be properly configured with:
+  * zVM connection details (host, user, password, guest name)
+  * Network configuration (IP, gateway, netmask, device)
+  * Storage configuration (DASD or FCP devices)
+  * DNS and hostname settings
+
+### Outcomes
+* **Configuration Files Generated:**
+  * Boot parameter file (parm) created with network and storage settings
+  * Kickstart file created for automated RHEL installation
+  * Boot script generated for Tessia-based provisioning
+
+* **File Upload:**
+  * Configuration files uploaded to file server via HTTP (with SSH fallback)
+  * Files accessible for bastion boot process
+
+* **Bastion Provisioning:**
+  * zVM guest booted using Tessia base library
+  * RHEL installed via kickstart for fully automated setup
+  * Network interfaces configured (supports multiple interfaces)
+  * Storage devices attached (DASD or FCP with multipath support)
+
+* **Inventory Management:**
+  * Bastion added to Ansible in-memory inventory
+  * Bastion inventory file created at `inventories/default/bastion_hosts`
+  * Provisioning summary saved to `inventories/default/bastion_zvm_summary.md`
+
+### Command
+```bash
+ansible-playbook playbooks/4_create_bastion_zvm.yaml
+```
+
+### Notes
+* **Installation Type Check:** Playbook will fail if `installation_type` is not set to `zvm`
+* **HTTP-First Approach:** Files are uploaded/downloaded via HTTP with automatic SSH fallback for compatibility
+* **Storage Flexibility:** Supports both DASD (ECKD) and FCP (SCSI) storage with automatic detection
+* **Network Support:** Handles multiple network interfaces with IPv4 and optional IPv6
+* **Multipath:** FCP devices automatically configured for multipath (mpatha, mpathb, etc.)
+* **Monitoring:** Watch the zVM guest console to monitor boot progress and troubleshoot issues
+* **Tessia Integration:** Uses Tessia base library for z/VM guest management and provisioning
+* **Configuration Validation:** Playbook validates all required zVM and network settings before proceeding
+
+### Troubleshooting
+* **Boot Failures:** Check the generated parm file at `{{ env.file_server.cfgs_dir }}/{{ zvm_guest }}-boot.parm`
+* **Network Issues:** Verify znet device configuration in bastion-zvm.yaml matches your z/VM setup
+* **Storage Problems:** Ensure DASD or FCP devices are properly attached to the zVM guest
+* **Kickstart Errors:** Review kickstart file at `{{ env.file_server.cfgs_dir }}/rhel9-bastion-ks.cfg`
+* **File Server Access:** Verify HTTP server is running and files are accessible at configured URLs
+* **Tessia Errors:** Check Tessia base library installation and z/VM connectivity
+
+### Next Steps
+After successful bastion creation:
+1. Verify bastion access: `ssh root@<bastion-ip>`
+2. Run setup playbook: `ansible-playbook playbooks/5_setup_bastion.yaml`
+3. Continue with cluster deployment: `ansible-playbook playbooks/6_create_nodes.yaml`
 ## 5 Setup Bastion Playbook
 ### Overview
 Configuration of the bastion to host essential infrastructure services for the cluster. Can be first-time setup or use an existing server.
@@ -209,3 +274,5 @@ In case the cluster needs to be completely reinstalled, run this playbook. It wi
 ## Test Playbook (test.yaml)
 ### Overview
 * Use this playbook for your testing purposes, if needed.
+
+<!-- Assisted by Bob -->

@@ -20,6 +20,30 @@
     - (env.network_mode | upper == 'NAT')
     - (env.jumphost.name is none or env.jumphost.ip is none or env.jumphost.user is none or env.jumphost.pass is none or env.jumphost.path_to_keypair is none)
 
+- name: Load zVM bastion configuration if installation_type is zvm
+  tags: set_inventory
+  ansible.builtin.include_vars:
+    file: "{{ find_project.stdout }}{{ find_inventory.stdout }}/host_vars/{{ bastion_node_name | default('bastion-zvm') }}.yaml"
+  when: installation_type | lower == 'zvm'
+  register: zvm_bastion_vars
+
+- name: Check for multiple bastion definitions in hosts file
+  tags: set_inventory
+  ansible.builtin.shell: |
+    grep -c '^\[bastion\]' "{{ find_project.stdout }}{{ find_inventory.stdout }}/hosts" || echo "0"
+  register: bastion_count
+  changed_when: false
+  failed_when: false
+
+- name: Warn if multiple bastion sections found
+  tags: set_inventory
+  ansible.builtin.debug:
+    msg:
+      - "WARNING: Multiple [bastion] sections found in hosts file!"
+      - "Count: {{ bastion_count.stdout }}"
+      - "The inventory will be regenerated with a single bastion entry."
+  when: bastion_count.stdout | int > 1
+
 - name: Template out inventory with localhost, file server, KVM host, jumphost(optional) and bastion information
   tags: set_inventory
   ansible.builtin.template:

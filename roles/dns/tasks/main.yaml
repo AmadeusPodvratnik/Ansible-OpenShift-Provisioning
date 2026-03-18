@@ -1,22 +1,32 @@
 ---
 
+- name: Load zVM bastion host_vars if installation_type is zvm
+  tags: dns
+  ansible.builtin.include_vars:
+    file: "{{ inventory_dir }}/host_vars/{{ env.bastion_node_name }}.yaml"
+  when:
+    - installation_type | lower == 'zvm'
+    - env.bastion_node_name is defined
+
 - name: Enable named
   tags: dns
   ansible.builtin.systemd:
     name: named
-    enabled: yes
+    enabled: true
 
-- name: Start named
+- name: Split Bastion IP addresses for use in templates (zVM)
   tags: dns
-  ansible.builtin.systemd:
-    name: named
-    state: started
+  ansible.builtin.set_fact:
+    bastion_split_ip: "{{ host_ip.split('.') }}"
+  when: installation_type | lower == 'zvm'
 
-- name: Split Bastion IP addresses for use in templates
+- name: Split Bastion IP addresses for use in templates (KVM - external IP)
   tags: dns
   ansible.builtin.set_fact:
     bastion_split_ip: "{{ env.bastion.networking.ip.split('.') }}"
-  when: env.bastion.networking.internal_ip is not defined or env.bastion.networking.internal_ip == None
+  when:
+    - installation_type | lower != 'zvm'
+    - (env.bastion.networking.internal_ip is not defined or env.bastion.networking.internal_ip == None)
 
 - name: Split Bastion Internal_IP addresses for use in templates
   tags: dns
@@ -38,7 +48,7 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
 
 - name: Template DNS forwarding file to bastion
   tags: dns
@@ -48,7 +58,7 @@
     owner: named
     group: named
     mode: "0644"
-    backup: yes
+    backup: true
 
 - name: Add Bootstrap node to DNS forwarding file on bastion
   tags: dns
@@ -66,7 +76,7 @@
     line: "{{ env.cluster.nodes.control.hostname[i] }}.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}. IN A {{ env.cluster.nodes.control.ip[i] }}"
   with_sequence: start=0 end={{ (env.cluster.nodes.control.hostname | length) - 1 }} stride=1
   loop_control:
-    extended: yes
+    extended: true
     index_var: i
 
 - block:
@@ -78,7 +88,7 @@
       line: "{{ env.cluster.nodes.compute.hostname[i] }}.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}. IN A {{ env.cluster.nodes.compute.ip[i] }}"
     with_sequence: start=0 end={{ (env.cluster.nodes.compute.hostname | length) - 1 }} stride=1
     loop_control:
-      extended: yes
+      extended: true
       index_var: i
   when: env.cluster.nodes.compute.hostname is defined and env.cluster.nodes.compute.hostname[0] is defined and (env.cluster.nodes.compute.hostname | length) > 0
 
@@ -90,7 +100,7 @@
     line: "{{ env.cluster.nodes.infra.hostname[i] }}.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}. IN A {{ env.cluster.nodes.infra.ip[i] }}"
   with_sequence: start=0 end={{ (env.cluster.nodes.infra.hostname | length) - 1 }} stride=1
   loop_control:
-    extended: yes
+    extended: true
     index_var: i
   when: env.cluster.nodes.infra.hostname is defined
 
@@ -102,7 +112,7 @@
     owner: named
     group: named
     mode: "0644"
-    backup: yes
+    backup: true
 
 - name: Add control nodes to DNS reverse lookup file on bastion
   tags: dns
@@ -112,7 +122,7 @@
     line: "{{ env.cluster.nodes.control.ip[i].split('.').3 }}     IN      PTR     {{ env.cluster.nodes.control.hostname[i] }}.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}."
   with_sequence: start=0 end={{ (env.cluster.nodes.control.hostname | length) - 1 }} stride=1
   loop_control:
-    extended: yes
+    extended: true
     index_var: i
 
 - name: Add compute nodes to DNS reverse lookup file on bastion
@@ -123,7 +133,7 @@
     line: "{{ env.cluster.nodes.compute.ip[i].split('.').3 }}     IN      PTR     {{ env.cluster.nodes.compute.hostname[i] }}.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}."
   with_sequence: start=0 end={{ (env.cluster.nodes.compute.hostname | length) - 1 }} stride=1
   loop_control:
-    extended: yes
+    extended: true
     index_var: i
   when: env.cluster.nodes.compute.hostname is defined and env.cluster.nodes.compute.hostname[0] is defined and env.cluster.nodes.compute.hostname[0] != None
 
@@ -135,7 +145,7 @@
     line: "{{ env.cluster.nodes.infra.ip[i].split('.').3 }}     IN      PTR     {{ env.cluster.nodes.infra.hostname[i] }}.{{ env.cluster.networking.metadata_name }}.{{ env.cluster.networking.base_domain }}."
   with_sequence: start=0 end={{ (env.cluster.nodes.infra.hostname | length) - 1 }} stride=1
   loop_control:
-    extended: yes
+    extended: true
     index_var: i
   when: env.cluster.nodes.infra.hostname is defined
 

@@ -15,15 +15,30 @@
 {{ env.z.lpar3.hostname }} ansible_host={{ env.z.lpar3.ip }} ansible_user={{ env.z.lpar3.user }} ansible_become_password='{{ '{{' }} env.z.lpar3.pass {{ '}}' }}'
 {% endif %}
 
-{% if ( installation_type | lower == 'zvm' ) %}
-{{ '[zvm_host]' }}
-{% for item in range( zvm.nodes | length ) %}
-{{ zvm.nodes[item].name | string + ' ansible_host=' + zvm.nodes[item].interface.ip | string + ' ansible_user=' +  zvm.nodes[item].user | string + ' ansible_become_password=' +  zvm.nodes[item].password | string }}
+{% if ( installation_type | lower == 'zvm' ) and ( zvm is defined ) and ( zvm.nodes is defined ) and ( zvm.nodes is not none ) and ( zvm.nodes | length > 0 ) %}
+{# Only add zvm_host section if zvm.nodes exists and has meaningful values #}
+{% set has_valid_nodes = [] %}
+{% for node in zvm.nodes %}
+{% if node.name is defined and node.name is not none and node.interface is defined and node.interface.ip is defined and node.interface.ip is not none %}
+{% set _ = has_valid_nodes.append(node) %}
+{% endif %}
 {% endfor %}
+{% if has_valid_nodes | length > 0 %}
+{{ '[zvm_host]' }}
+{% for node in has_valid_nodes %}
+{{ node.name | string + ' ansible_host=' + node.interface.ip | string + ' ansible_user=' + node.user | string + ' ansible_become_password=' + node.password | string }}
+{% endfor %}
+{% endif %}
 {% endif %}
 
 [bastion]
+{% if installation_type | lower == 'zvm' %}
+{# Use zVM bastion configuration from bastion-zvm.yaml #}
+{{ hostname | default(zvm_guest | lower) }} ansible_host={{ host_ip }} ansible_user={{ node_user }} ansible_become_password='{{ '{{' }} vault_bastion_pass {{ '}}' }}'
+{% else %}
+{# Use standard KVM bastion configuration from all.yaml #}
 {{ env.bastion.networking.hostname }} ansible_host={{ env.bastion.networking.ip }} ansible_user={{ env.bastion.access.user }} ansible_become_password='{{ '{{' }} env.bastion.access.pass {{ '}}' }}'
+{% endif %}
 
 {% if ( env.network_mode | upper == 'NAT' ) and ( env.jumphost.name is not none ) and ( env.jumphost.ip is not none ) and ( env.jumphost.user is not none ) and ( env.jumphost.pass is not none ) -%}
 {{ '[jumphost]' }}

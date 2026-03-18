@@ -92,3 +92,6 @@ In addition make sure that python3 is installed on the jumphost otherwise ansibl
 ```
 yum install python3 
 ```
+
+### zVM Installation
+The z/VM bastion provisioning uses Tessia base library for guest management. Ensure it's installed on the Ansible controller. If running on MacOS there might be an issue with Tessia base libary so it make sense to run the ansible controller on a Linux machine. The Tessia base library can be installed using the following command: `pip install tessia-base`. You can install it in a virtual environment if needed but make sure to run the playbooks after activating the virtual environment.

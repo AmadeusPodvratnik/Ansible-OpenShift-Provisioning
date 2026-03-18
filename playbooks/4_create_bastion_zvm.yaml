@@ -1,0 +1,136 @@
+---
+# Create bastion node on existing zVM guest using Tessia
+# Assisted by Bob
+- name: "Create bastion node on zVM guest"
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yaml"
+    - "{{ inventory_dir }}/group_vars/secrets.yaml"
+  pre_tasks:
+    - name: Display playbook information
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "  zVM Bastion Provisioning"
+          - "========================================="
+          - "This playbook will provision a bastion node"
+          - "on an existing zVM guest using Tessia base lib"
+          - "========================================="
+    - name: Verify installation type
+      ansible.builtin.assert:
+        that:
+          - installation_type is defined
+          - installation_type | lower == "zvm"
+        fail_msg: |
+          This playbook is only for zVM-based installations.
+          Current installation_type: {{ installation_type | default('not set') }}
+          Please set: installation_type: zvm
+    - name: Load bastion host variables
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/host_vars/{{ env.bastion_node_name }}.yaml"
+      when: env.bastion_node_name is defined
+    - name: Check if bastion should be created
+      ansible.builtin.assert:
+        that:
+          - create_bastion is defined
+          - create_bastion == True
+        fail_msg: |
+          Bastion creation is disabled in configuration.
+          Please set: env.bastion.create: True
+    - name: Verify zVM configuration is complete
+      ansible.builtin.assert:
+        that:
+          - zvm_guest is defined
+          - zvm_host is defined
+          - zvm_user is defined
+          - hostname is defined
+          - zrd_network_mode is defined
+          - network is defined
+          - network[0].ip is defined
+        fail_msg: |
+          zVM configuration is incomplete.
+          Please ensure all required zVM variables are set in host_vars.
+    - name: Display configuration summary
+      ansible.builtin.debug:
+        msg:
+          - "Configuration Summary:"
+          - "  zVM Host: {{ zvm_host }}"
+          - "  Guest Name: {{ zvm_guest }}"
+          - "  Network Mode: {{ zrd_network_mode }}"
+          - "  Bastion IP: {{ network[0].ip }}"
+          - "  Hostname: {{ hostname }}"
+  tasks:
+    - name: "Generate parm file for bastion"
+      ansible.builtin.include_role:
+        name: create_zvm_bastion_cfg_files
+      vars:
+        bastion_config_file: "{{ env.bastion_node_name }}"
+
+    - name: "Boot bastion node"
+      ansible.builtin.include_role:
+        name: boot_zvm_bastion_nodes
+      vars:
+        bastion_config_file: "{{ env.bastion_node_name }}"
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "  ✓ Bastion Provisioning Complete"
+          - "========================================="
+          - "Bastion Details:"
+          - "  Hostname: {{ hostname }}"
+          - "  IP Address: {{ network[0].ip }}"
+          - "  zVM Guest: {{ zvm_guest }}"
+          - "  SSH: ssh root@{{ network[0].ip }}"
+          - ""
+          - "Next Steps:"
+          - "  1. Verify bastion access:"
+          - "     ssh {{ node_user }}@{{ network[0].ip }}"
+          - ""
+          - "  2. Configure bastion services:"
+          - "     ansible-playbook playbooks/5_setup_bastion.yaml"
+          - ""
+          - "  3. Continue with cluster deployment:"
+          - "     ansible-playbook playbooks/6_create_nodes.yaml"
+          - "========================================="
+    - name: Save provisioning summary
+      ansible.builtin.copy:
+        content: |
+          # zVM Bastion Provisioning Summary
+
+          Date: {{ ansible_date_time.iso8601 }}
+
+          ## Configuration
+          - zVM Host: {{ zvm_host }}
+          - Guest Name: {{ zvm_guest }}
+          - Network Mode: {{ zrd_network_mode }}
+
+          ## Bastion Details
+          - Hostname: {{ hostname }}
+          - IP Address: {{ network[0].ip }}
+          - Gateway: {{ network[0].gateway }}
+          - Nameserver: {{ nameserver[0] }}
+
+          ## Access
+          ```bash
+          ssh ssh {{ node_user }}@{{ network[0].ip }}
+          ```
+
+          ## Next Steps
+          1. Configure bastion services:
+             ```bash
+             ansible-playbook playbooks/5_setup_bastion.yaml
+             ```
+
+          2. Continue with cluster deployment:
+             ```bash
+             ansible-playbook playbooks/6_create_nodes.yaml
+             ```
+        dest: "{{ inventory_dir }}/bastion_zvm_summary.md"
+        mode: '0644'
+      delegate_to: localhost
+    - name: Display summary file location
+      ansible.builtin.debug:
+        msg: "Provisioning summary saved to: {{ inventory_dir }}/bastion_zvm_summary.md"

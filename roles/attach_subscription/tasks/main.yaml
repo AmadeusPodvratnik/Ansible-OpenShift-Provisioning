@@ -1,4 +1,25 @@
 ---
+# Assisted by Bob
+
+- name: Validate Red Hat subscription configuration
+  tags: attach_subscription
+  ansible.builtin.assert:
+    that:
+      - >-
+        (env.redhat.username is defined and
+         env.redhat.username is not none and
+         env.redhat.username | length > 0 and
+         env.redhat.password is defined and
+         env.redhat.password is not none and
+         env.redhat.password | length > 0) or
+        (env.redhat.activation_key is defined and
+         env.redhat.activation_key is not none and
+         env.redhat.activation_key | length > 0 and
+         env.redhat.organization is defined and
+         env.redhat.organization is not none and
+         env.redhat.organization | length > 0)
+    fail_msg: "Red Hat subscription requires either (username AND password) OR (activation_key AND organization)"
+    success_msg: "Red Hat subscription configuration validated"
 
 - name: "Register server with Red Hat using user and pwd"
   tags: attach_subscription
@@ -12,22 +33,33 @@
   delay: 30
   until: registration is not failed
   when:
-    - env.redhat.password is defined
     - env.redhat.username is defined
+    - env.redhat.username is not none
+    - env.redhat.username | length > 0
+    - env.redhat.password is defined
+    - env.redhat.password is not none
+    - env.redhat.password | length > 0
 
-- name: 'Activate RHEL account if software need to be installed to'
-  tags: setup, teuthology_node, setup_nodes
+- name: 'Activate RHEL account using activation key and organization'
+  tags: attach_subscription
   ansible.builtin.command:
     argv:
       - rhc
       - connect
       - --activation-key
-      - "{{ thlgy_ceph_nodes.rhel_activation_key }}"
+      - "{{ env.redhat.activation_key }}"
       - --organization
-      - "{{ thlgy_ceph_nodes.rhel_organization }}"
+      - "{{ env.redhat.organization }}"
+  register: rhc_registration
+  changed_when: rhc_registration.rc == 0
   when:
     - env.redhat.activation_key is defined
+    - env.redhat.activation_key is not none
+    - env.redhat.activation_key | length > 0
     - env.redhat.organization is defined
+    - env.redhat.organization is not none
+    - env.redhat.organization | length > 0
+    - env.redhat.username is not defined or env.redhat.username is none or env.redhat.username | length == 0
 
 - name: 'Install the rhc-worker-playbook'
   tags: setup, teuthology_node, setup_nodes

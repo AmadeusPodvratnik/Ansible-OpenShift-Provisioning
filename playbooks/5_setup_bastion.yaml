@@ -64,8 +64,21 @@
   vars_files:
     - "{{ inventory_dir }}/group_vars/all.yaml"
     - "{{ inventory_dir }}/group_vars/secrets.yaml"
-  vars:
-    ssh_target: ["{{ env.bastion.networking.ip }}", "{{ env.bastion.access.user }}", "{{ env.bastion.access.pass }}","{{ path_to_key_pair }}"]
+  pre_tasks:
+    - name: Load zVM bastion host_vars if installation_type is zvm
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/host_vars/{{ bastion_node_name | default('bastion-zvm') }}.yaml"
+      when: installation_type | lower == 'zvm'
+
+    - name: Set ssh_target for zVM bastion
+      ansible.builtin.set_fact:
+        ssh_target: ["{{ host_ip }}", "{{ node_user }}", "{{ vault_bastion_pass }}", "{{ path_to_key_pair }}"]
+      when: installation_type | lower == 'zvm'
+
+    - name: Set ssh_target for KVM bastion
+      ansible.builtin.set_fact:
+        ssh_target: ["{{ env.bastion.networking.ip }}", "{{ env.bastion.access.user }}", "{{ env.bastion.access.pass }}", "{{ path_to_key_pair }}"]
+      when: installation_type | lower != 'zvm'
   roles:
     - ssh_copy_id
 
@@ -75,30 +88,38 @@
   vars_files:
     - "{{ inventory_dir }}/group_vars/all.yaml"
     - "{{ inventory_dir }}/group_vars/secrets.yaml"
-  tasks:
-  - name: Enabliling the HiperSocket card on bastion if installation_type is lpar else will be skipped.
-    block:
-    - name: Getting the Hipervisor Details
-      ansible.builtin.command: lscpu
-      register: hipervisor_info
-    - name: Fail the play if bastion is on the KVM guest
-      ansible.builtin.fail:
-        msg: Currently not supported for LPAR clsuter with this particular mode when bastion is on KVM host.
-      when: "'KVM' in hipervisor_info.stdout"
-    - name: Check if vars file exists
-      ansible.builtin.stat:
-        path: "{{ inventory_dir }}/host_vars/{{ env.cluster.nodes.bootstrap.vm_name }}.yaml"
-      register: vars_file
-      delegate_to: localhost
-    - name: Include the vars
+  pre_tasks:
+    - name: Load zVM bastion host_vars if installation_type is zvm
       ansible.builtin.include_vars:
-        file: "{{ inventory_dir }}/host_vars/{{ env.cluster.nodes.bootstrap.vm_name }}.yaml"
-      when: vars_file.stat.exists
-    - name: Attaching HiperSocket card to bastion
-      ansible.builtin.include_tasks:
-        file: ../roles/bastion_setup_hipersocket_LPAR/tasks/main.yml
-      when: vars_file.stat.exists and networking.mode is defined and networking.mode | lower =='hipersocket'
-    when: installation_type | lower == "lpar"
+        file: "{{ inventory_dir }}/host_vars/{{ bastion_node_name }}.yaml"
+      when:
+        - installation_type | lower == 'zvm'
+        - bastion_node_name is defined
+      delegate_to: localhost
+  tasks:
+    - name: Enabliling the HiperSocket card on bastion if installation_type is lpar else will be skipped.
+      when: installation_type | lower == "lpar"
+      block:
+        - name: Getting the Hipervisor Details
+          ansible.builtin.command: lscpu
+          register: hipervisor_info
+        - name: Fail the play if bastion is on the KVM guest
+          ansible.builtin.fail:
+            msg: Currently not supported for LPAR clsuter with this particular mode when bastion is on KVM host.
+          when: "'KVM' in hipervisor_info.stdout"
+        - name: Check if vars file exists
+          ansible.builtin.stat:
+            path: "{{ inventory_dir }}/host_vars/{{ env.cluster.nodes.bootstrap.vm_name }}.yaml"
+          register: vars_file
+          delegate_to: localhost
+        - name: Include the vars
+          ansible.builtin.include_vars:
+            file: "{{ inventory_dir }}/host_vars/{{ env.cluster.nodes.bootstrap.vm_name }}.yaml"
+          when: vars_file.stat.exists
+        - name: Attaching HiperSocket card to bastion
+          ansible.builtin.include_tasks:
+            file: ../roles/bastion_setup_hipersocket_LPAR/tasks/main.yml
+          when: vars_file.stat.exists and networking.mode is defined and networking.mode | lower == 'hipersocket'
 
 - name: 5 setup bastion - configure bastion node with essential services
   hosts: bastion
@@ -112,6 +133,14 @@
     - "{{ inventory_dir }}/group_vars/secrets.yaml"
     - "{{ inventory_dir }}/group_vars/disconnected.yaml"
   pre_tasks:
+    - name: Load zVM bastion host_vars if installation_type is zvm
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/host_vars/{{ bastion_node_name }}.yaml"
+      when:
+        - installation_type | lower == 'zvm'
+        - bastion_node_name is defined
+      delegate_to: localhost
+
     - name: Import initial-resolv.yaml
       ansible.builtin.import_role:
         name: dns
@@ -136,6 +165,14 @@
     - "{{ inventory_dir }}/group_vars/secrets.yaml"
   vars:
     openvpn_role: "server"
+  pre_tasks:
+    - name: Load zVM bastion host_vars if installation_type is zvm
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/host_vars/{{ bastion_node_name }}.yaml"
+      when:
+        - installation_type | lower == 'zvm'
+        - bastion_node_name is defined
+      delegate_to: localhost
   roles:
     #- { role: robertdebock.bootstrap, tags: openvpn, when: env.z.high_availability == True }
     - { role: robertdebock.epel, tags: openvpn, when: env.setup_openvpn == True and env.z.high_availability == True  and installation_type|lower != "lpar" }
@@ -161,6 +198,14 @@
   vars_files:
     - "{{ inventory_dir }}/group_vars/all.yaml"
     - "{{ inventory_dir }}/group_vars/secrets.yaml"
+  pre_tasks:
+    - name: Load zVM bastion host_vars if installation_type is zvm
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/host_vars/{{ bastion_node_name }}.yaml"
+      when:
+        - installation_type | lower == 'zvm'
+        - bastion_node_name is defined
+      delegate_to: localhost
   tasks:
     - name: Fetch certificates and keys from bastion.
       tags: openvpn
@@ -239,6 +284,14 @@
     - "{{ inventory_dir }}/group_vars/all.yaml"
     - "{{ inventory_dir }}/group_vars/secrets.yaml"
     - "{{ inventory_dir }}/group_vars/disconnected.yaml"
+  pre_tasks:
+    - name: Load zVM bastion host_vars if installation_type is zvm
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/host_vars/{{ bastion_node_name }}.yaml"
+      when:
+        - installation_type | lower == 'zvm'
+        - bastion_node_name is defined
+      delegate_to: localhost
   roles:
     - common
     - { role: get_ocp, when: abi.flag is not defined or abi.flag != True }

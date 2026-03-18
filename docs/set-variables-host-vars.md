@@ -100,3 +100,91 @@
 **lpar.livedisk.wwpn** | <b>(Required if livedisktype is scsi)</b> World-wide port number when livedisktype is SCSI. | 500507630a1b50a4
 **lpar.livedisk.devicenr** | <b>(Optional)</b> the device no of the live disk | c6h1
 **lpar.livedisk.livedisk_root_pass** | <b>(Optional)</b> root password for the livedisk | p@ssword
+
+## 8 - z/VM Bastion Configuration (bastion-zvm.yaml.template)
+
+### Overview
+* This section applies to z/VM-based installations where the bastion runs directly on z/VM instead of as a KVM guest.
+* Use the `bastion-zvm.yaml.template` file from the host_vars folder and rename it to `bastion-zvm.yaml`.
+* This configuration is used with the `4_create_bastion_zvm.yaml` playbook.
+* **Important**: Set `installation_type: zvm` in your `group_vars/all.yaml` file to use this configuration.
+* **Note**: Future versions will include similar templates for control nodes, compute nodes, and infra nodes on z/VM.
+
+### 8.1 - General Settings
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**zvm_guest** | The z/VM guest name for the bastion (maximum 8 characters, uppercase). | BASTION1
+**host_ip** | The IPv4 address that will be assigned to this bastion node. | 192.168.1.20
+**node_user** | The username for logging into the bastion after creation. | root
+**node_user_pwd** | The password for the node user. Use Ansible vault for security. | {{ vault_bastion_pwd }}
+**create_bastion** | Boolean flag to indicate this node should be created as a bastion. | True
+
+### 8.2 - z/VM Hypervisor and Guest Credentials
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**zvm_host** | The hostname or IP address of the z/VM hypervisor where the guest will be created. | zvm.example.com
+**zvm_user** | The z/VM user that owns this guest (typically same as zvm_guest). | BASTION1
+**zvm_pass** | The password for the z/VM user. Use Ansible vault for security. | {{ vault_zvm_bastion_pwd }}
+
+### 8.3 - Hardware Settings
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**attach_network** | Boolean to attach network devices to the guest. | True
+**attach_disk** | Boolean to attach storage devices to the guest. | True
+**cpu** | Number of virtual CPUs to assign to the bastion. | 4
+**memory** | Amount of memory in MB to assign to the bastion. | 8192
+**zfcp_allow_lun_scan** | Enable (1) or disable (0) FCP LUN scanning. Disabled by default for security. | 0
+
+### 8.4 - Storage Configuration
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**zrd_dasd** | List of DASD device numbers for ECKD storage. Use `#X` as placeholder if not using DASD. | - 0.0.0100<br />- 0.0.0101
+**zrd_fcp** | List of FCP devices in format: adapter,wwpn,lun. Leave empty `[]` if using DASD. | - 0.0.8001,0x500507630400d1e3,0x4000404500000000<br />- 0.0.8101,0x500507630400d1e3,0x4000404500000000
+**install_disk** | The disk device name for installation. Use `mpatha` for multipath FCP, `sda` for single-path FCP, or `dasda` for DASD. | mpatha
+
+### 8.5 - Network Configuration
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**zrd_network_mode** | Network mode for z/VM. | osa
+**zrd_znet** | List of network device subchannels for OSA/vSwitch/Hipersockets in qeth format. | - qeth,0.0.1000,0.0.1001,0.0.1002,layer2=1
+**network[].ip** | IPv4 address for the network interface. Supports multiple interfaces. | 192.168.1.20
+**network[].ipv6** | IPv6 address for the network interface. Use `#X` if not using IPv6. | fd00::20
+**network[].gateway** | IPv4 gateway address. | 192.168.1.1
+**network[].gatewayv6** | IPv6 gateway address. Use `#X` if not using IPv6. | fd00::1
+**network[].netmask** | IPv4 subnet mask. | 255.255.255.0
+**network[].netmaskv6** | IPv6 prefix length. Use `#X` if not using IPv6. | 64
+**network[].device** | Network device name as seen by Linux (e.g., enc followed by first subchannel). | enc1000
+
+### 8.6 - DNS Configuration
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**nameserver** | List of DNS server IP addresses. At least one is required. | - 8.8.8.8<br />- 8.8.4.4
+
+### 8.7 - Bastion Services
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**bastion_services.dns** | Enable DNS server (bind) on the bastion. | True
+**bastion_services.haproxy** | Enable HAProxy load balancer on the bastion. | True
+**bastion_services.httpd** | Enable HTTP server for serving ignition files and RHCOS images. | True
+**bastion_services.firewalld** | Enable and configure firewall on the bastion. | True
+
+### 8.8 - Additional Boot Parameters
+**Variable Name** | **Description** | **Example**
+:--- | :--- | :---
+**additonal_params** | Additional kernel parameters to pass during boot. | rd.neednet=1 rd.luks.options=discard cio_ignore=all,!condev
+
+### Important Notes for z/VM Bastion
+* **Tessia Base Library**: The z/VM bastion provisioning uses Tessia base library for guest management. Ensure it's installed on the Ansible controller. If running on MacOS there might be an issue with Tessia base libary so it make sense to run the ansible controller on a Linux machine. The Tessia base library can be installed using the following command: `pip install tessia-base`. You can install it in a virtual environment if needed but make sure to run the playbooks after activating the virtual environment.
+* **Pre-existing Guest**: The z/VM guest must already exist and be accessible before running the playbook.
+* **Storage Choice**: Choose either DASD or FCP storage, not both. Set unused storage type to `#X` or `[]`.
+* **Network Devices**: The `zrd_znet` format must match your z/VM network configuration (OSA, vSwitch, or Hipersockets).
+* **Multipath**: For FCP storage with multiple paths, use `mpatha` as the install_disk. The playbook automatically configures multipath.
+* **File Server**: Ensure the file server specified in `group_vars/all.yaml` is accessible and has the RHEL ISO mounted.
+
+### Future Enhancements
+* **Control Node Templates**: Templates for z/VM control nodes will be added in upcoming versions.
+* **Compute Node Templates**: Templates for z/VM compute nodes will be added in upcoming versions.
+* **Infra Node Templates**: Templates for z/VM infrastructure nodes will be added in upcoming versions.
+* **Day 2 Operations**: Additional playbooks for scaling and managing z/VM-based clusters.
+
+<!-- Assisted by Bob -->

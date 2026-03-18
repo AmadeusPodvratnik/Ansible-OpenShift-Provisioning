@@ -1,0 +1,145 @@
+---
+# This role templates out an s390x boot parm file for RHEL installation on z/VM
+# Assisted by Bob
+- name: 'Include matching yaml file'
+  ansible.builtin.include_vars:
+    file: "{{ inventory_dir }}/host_vars/{{ bastion_config_file }}.yaml"
+
+- name: "Validate required variables"
+  ansible.builtin.assert:
+    that:
+      - bastion_config_file is defined
+      - bastion_config_file | length > 0
+      - env.file_server.cfgs_dir is defined
+    fail_msg: "Required variables are not defined. Please set bastion_config_file and env.file_server.cfgs_dir"
+    success_msg: "All required variables are defined"
+
+- name: "Display loaded bastion configuration"
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - "  zVM Bastion Provisioning"
+      - "=========================================="
+      - "This playbook will create the cfg files for"
+      - "the bastion node using Tessia base lib"
+      - "========================================="
+      - "Bastion guest: {{ zvm_guest }}"
+      - "Host IP: {{ host_ip }}"
+      - "Network devices: {{ zrd_znet | length }}"
+      - "DASD devices: {{ zrd_dasd | length }}"
+      - "FCP devices: {{ zrd_fcp | length }}"
+
+- name: "Validate network configuration - at least one network device must be configured"
+  ansible.builtin.assert:
+    that:
+      - network is defined
+      - network | length > 0
+      - network[0].ip is defined
+      - network[0].gateway is defined
+      - network[0].netmask is defined
+      - network[0].device is defined
+    fail_msg: "Network configuration is incomplete in {{ bastion_config_file }}"
+    success_msg: "Network configuration is valid"
+
+- name: "Validate storage configuration"
+  ansible.builtin.assert:
+    that:
+      - (zrd_dasd is defined and zrd_dasd | length > 0) or (zrd_fcp is defined and zrd_fcp | length > 0)
+    fail_msg: "At least one storage device (DASD or FCP) must be configured"
+    success_msg: "Storage configuration is valid"
+
+- name: "Set hostname from zvm_guest if not defined"
+  ansible.builtin.set_fact:
+    hostname: "{{ zvm_guest | lower }}"
+  when: hostname is not defined
+
+- name: "Download RHEL kernel to /tmp"
+  ansible.builtin.get_url:
+    url: "http://{{ env.file_server.ip }}{% if env.file_server.port is defined and env.file_server.port is not none and env.file_server.port | string | length > 0 %}:{{ env.file_server.port }}{% endif %}/{{ env.file_server.iso_mount_dir }}/images/kernel.img"
+    dest: "/tmp/kernel.img"
+    mode: '0644'
+  register: kernel_download
+
+- name: "Download RHEL initrd to /tmp"
+  ansible.builtin.get_url:
+    url: "http://{{ env.file_server.ip }}{% if env.file_server.port is defined and env.file_server.port is not none and env.file_server.port | string | length > 0 %}:{{ env.file_server.port }}{% endif %}/{{ env.file_server.iso_mount_dir }}/images/initrd.img"
+    dest: "/tmp/initrd.img"
+    mode: '0644'
+  register: initrd_download
+
+- name: "Display download results"
+  ansible.builtin.debug:
+    msg:
+      - "Kernel downloaded: {{ kernel_download.dest }} ({{ kernel_download.size }} bytes)"
+      - "Initrd downloaded: {{ initrd_download.dest }} ({{ initrd_download.size }} bytes)"
+
+- name: "Template out s390x boot parm file locally"
+  ansible.builtin.template:
+    src: bastion-boot.parm.j2
+    dest: "/tmp/{{ zvm_guest }}-boot.parm"
+    mode: '0644'
+  register: parm_file_local
+
+- name: "Upload parm file to file server via SSH"
+  delegate_to: "{{ env.file_server.ip }}"
+  vars:
+    ansible_user: "{{ env.file_server.user }}"
+    ansible_password: "{{ env.file_server.pass }}"
+    ansible_port: "{{ env.file_server.port | default('22') if env.file_server.port is defined and env.file_server.port | string | length > 0 else '22' }}"
+  ansible.builtin.copy:
+    src: "/tmp/{{ zvm_guest }}-boot.parm"
+    dest: "{{ http_content_root }}/{{ env.file_server.cfgs_dir }}/{{ zvm_guest }}-boot.parm"
+    mode: '0644'
+  register: parm_file_result
+
+- name: "Display parm file upload result"
+  ansible.builtin.debug:
+    msg:
+      - "Parm file uploaded successfully"
+      - "Location: {{ env.file_server.cfgs_dir }}/{{ zvm_guest }}-boot.parm"
+      - "Size: {{ parm_file_result.size }} bytes"
+
+- name: "Determine disk type for kickstart"
+  ansible.builtin.set_fact:
+    disk_type: "{{ 'FCP' if (zrd_fcp is defined and zrd_fcp | length > 0 and zrd_fcp[0] != '#X') else 'ECKD' }}"
+
+- name: "Template out kickstart file locally"
+  ansible.builtin.template:
+    src: "rhel9-bastion-ks.cfg.j2"
+    dest: "/tmp/rhel9-bastion-ks.cfg"
+    mode: '0644'
+  register: ks_file_local
+
+- name: "Upload kickstart file to file server via SSH"
+  delegate_to: "{{ env.file_server.ip }}"
+  vars:
+    ansible_user: "{{ env.file_server.user }}"
+    ansible_password: "{{ env.file_server.pass }}"
+    ansible_port: "{{ env.file_server.port | default('22') if env.file_server.port is defined and env.file_server.port | string | length > 0 else '22' }}"
+  ansible.builtin.copy:
+    src: "/tmp/rhel9-bastion-ks.cfg"
+    dest: "{{ http_content_root }}/{{ env.file_server.cfgs_dir }}/rhel9-bastion-ks.cfg"
+    mode: '0644'
+  register: ks_file_result
+
+- name: "Display kickstart file upload result"
+  ansible.builtin.debug:
+    msg:
+      - "Kickstart file uploaded successfully"
+      - "Location: {{ env.file_server.cfgs_dir }}/rhel9-bastion-ks.cfg"
+      - "Size: {{ ks_file_result.size }} bytes"
+
+
+- name: "Template out boot_bastion script to /tmp directory"
+  ansible.builtin.template:
+    src: "boot_bastion.py.j2"
+    dest: "/tmp/boot_bastion_{{ zvm_guest }}.py"
+    mode: '0755'
+  register: boot_script_result
+
+- name: "Display boot script execution results"
+  ansible.builtin.debug:
+    msg:
+      - "Boot script executed successfully"
+      - "Script location: {{ boot_script_result.dest }}"
+      - "Size: {{ boot_script_result.size }}"

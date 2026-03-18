@@ -1,0 +1,15 @@
+---
+# Default file for template_zvm_parm_file
+# Default values for optional parameters
+# These can be overridden in the bastion configuration file
+
+# Name of the bastion configuration file (host_vars YAML file)
+# This should be set when calling the role
+bastion_config_file: "bastion-zvm"
+http_content_root: /var/www/html
+
+# Console settings - these are standard for s390x
+console_primary: "ttysclp0"
+console_secondary: "tty0"
+
+tessia_transfer_buffer_size: 8000

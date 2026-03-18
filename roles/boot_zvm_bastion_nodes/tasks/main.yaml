@@ -1,0 +1,124 @@
+---
+# Assisted by Bob
+
+- name: 'Include matching yaml file'
+  ansible.builtin.include_vars:
+    file: "{{ inventory_dir }}/host_vars/{{ bastion_config_file }}.yaml"
+
+- name: "Display loaded bastion configuration"
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - "  zVM Bastion boot"
+      - "=========================================="
+      - "Bastion guest: {{ zvm_guest }}"
+      - "Host IP: {{ host_ip }}"
+      - "Bastion cfg file: {{ bastion_config_file }}.yaml"
+      - "Bastion boot file: /tmp/boot_bastion_{{ zvm_guest }}.sh"
+
+- name: "Determine disk type"
+  ansible.builtin.set_fact:
+    disk_type: "{{ 'FCP' if (zrd_fcp is defined and zrd_fcp | length > 0 and zrd_fcp[0] != '#X') else 'ECKD' }}"
+
+- name: "Calculate HTTP path for parm file"
+  ansible.builtin.set_fact:
+    parm_http_path: "{{ env.file_server.cfgs_dir | regex_replace('^/var/www/html', '') }}"
+
+- name: "Read cmdline from parm file via HTTP"
+  ansible.builtin.uri:
+    url: "http://{{ env.file_server.ip }}{% if env.file_server.port is defined and env.file_server.port is not none and env.file_server.port | string | length > 0 %}:{{ env.file_server.port }}{% endif %}/{{ parm_http_path }}/{{ zvm_guest }}-boot.parm"
+    method: GET
+    return_content: true
+    status_code: 200
+  register: parm_file_http
+  ignore_errors: true
+
+- name: "Fallback to SSH if HTTP read fails"
+  delegate_to: "{{ env.file_server.ip }}"
+  vars:
+    ansible_user: "{{ env.file_server.user }}"
+    ansible_password: "{{ env.file_server.pass }}"
+    ansible_port: "{{ env.file_server.port | default('22') if env.file_server.port is defined and env.file_server.port | string | length > 0 else '22' }}"
+  ansible.builtin.slurp:
+    src: "{{ http_content_root }}/{{ env.file_server.cfgs_dir }}/{{ zvm_guest }}-boot.parm"
+  register: parm_file_ssh
+  when: parm_file_http is failed
+
+- name: "Set cmdline from parm file (HTTP)"
+  ansible.builtin.set_fact:
+    boot_cmdline: "{{ parm_file_http.content | trim }}"
+  when: parm_file_http is succeeded
+
+- name: "Set cmdline from parm file (SSH)"
+  ansible.builtin.set_fact:
+    boot_cmdline: "{{ parm_file_ssh.content | b64decode | trim }}"
+  when: parm_file_http is failed
+
+- name: "Display cmdline from parm file"
+  ansible.builtin.debug:
+    msg:
+      - "Cmdline read from parm file:"
+      - "{{ boot_cmdline }}"
+
+- name: "Build base command arguments"
+  ansible.builtin.set_fact:
+    boot_cmd_args:
+      - python3
+      - "/tmp/boot_bastion_{{ zvm_guest }}.py"
+      - --zvmname
+      - "{{ zvm_guest }}"
+      - --zvmhost
+      - "{{ zvm_host }}"
+      - --zvmuser
+      - "{{ zvm_user }}"
+      - --zvmpass
+      - "{{ zvm_pass }}"
+      - --cpu
+      - "{{ cpu }}"
+      - --memory
+      - "{{ memory }}"
+      - --kernel
+      - file:///tmp/kernel.img
+      - --initrd
+      - file:///tmp/initrd.img
+      - --cmdline
+      - "{{ boot_cmdline }}"
+      - --network
+      - "{{ zrd_network_mode }}"
+      - --disk_type
+      - "{{ disk_type }}"
+
+- name: "Add DASD disk arguments"
+  ansible.builtin.set_fact:
+    boot_cmd_args: "{{ boot_cmd_args + ['--disk_dev', item] }}"
+  loop: "{{ zrd_dasd }}"
+  when:
+    - disk_type == 'ECKD'
+    - zrd_dasd is defined
+    - item != '#X'
+
+- name: "Add FCP disk arguments"
+  ansible.builtin.set_fact:
+    boot_cmd_args: "{{ boot_cmd_args + ['--disk_dev', item.split(',')[0], '--fcp_rport', item.split(',')[1], '--fcp_lun', item.split(',')[2]] }}"
+  loop: "{{ zrd_fcp }}"
+  when:
+    - disk_type == 'FCP'
+    - zrd_fcp is defined
+    - item != '#X'
+
+- name: "Booting zvm node"
+  ansible.builtin.command:
+    argv: "{{ boot_cmd_args }}"
+  environment:
+    PYTHONPATH: "/path/to/tessia:{{ ansible_env.PYTHONPATH | default('') }}"
+  register: boot_result
+  failed_when: boot_result.rc != 0
+
+- name: "Display boot result"
+  ansible.builtin.debug:
+    msg: "{{ boot_result.stdout_lines }}"
+
+- name: Check for boot errors
+  ansible.builtin.fail:
+    msg: "Boot failed: {{ boot_result.stderr }}"
+  when: boot_result.stderr is defined and boot_result.stderr | length > 0 and 'Error' in boot_result.stderr
