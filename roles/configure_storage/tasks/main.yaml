@@ -62,7 +62,7 @@
     group: qemu
     mode: g+x
     recurse: false
-  loop: "{{ range( 0, storage.pool_path.split('/') | length + 1 ) }}"
+  loop: "{{ range(0, storage.pool_path.split('/') | length + 1) | list }}"
   loop_control:
     extended: yes
     index_var: i
@@ -75,7 +75,7 @@
   community.libvirt.virt_pool:
     command: define
     name: "{{ env.cluster.networking.metadata_name }}-vdisk"
-    xml: '{{ lookup ( "template", "vdisk.xml.j2" ) }}'
+    xml: '{{ lookup("template", "vdisk.xml.j2") }}'
 
 - name: Set storage pool to active.
   tags: configure_storage, pool
