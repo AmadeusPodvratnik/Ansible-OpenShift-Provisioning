@@ -27,7 +27,7 @@
         - disconnected_enabled
         - disconnected.registry.bastion.enabled | default(false)
         - not (disconnected.registry.bastion.use_local_repo | default(true))
-        - not (use_pull_through_registry | default(false))
+        - not (disconnected.registry.pull_through.enabled | default(false))
       tags:
         - download
         - download_rpms
@@ -49,7 +49,7 @@
       when:
         - disconnected_enabled
         - disconnected.registry.bastion.enabled | default(false)
-        - not (use_pull_through_registry | default(false))
+        - not (disconnected.registry.pull_through.enabled | default(false))
       tags:
         - registry
         - setup_registry
@@ -68,7 +68,7 @@
       when:
         - disconnected_enabled
         - disconnected.registry.bastion.enabled | default(false)
-        - not (use_pull_through_registry | default(false))
+        - not (disconnected.registry.pull_through.enabled | default(false))
       tags:
         - registry
         - update_pull_secret
@@ -109,7 +109,7 @@
         name: disconnected_setup_oc_mirror_bastion
       when: 
         - disconnected_enabled 
-        - not (use_pull_through_registry | default(false))
+        - not (disconnected.registry.pull_through.enabled | default(false))
       tags:
         - setup
         - oc_mirror_setup
@@ -127,7 +127,7 @@
         name: disconnected_mirror_ocp_bastion
       when: 
         - disconnected_enabled
-        - not (use_pull_through_registry | default(false))
+        - not (disconnected.registry.pull_through.enabled | default(false))
       tags:
         - mirror
         - oc_mirror_mirror

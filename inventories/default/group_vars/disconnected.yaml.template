@@ -8,6 +8,7 @@ disconnected:
     pull_secret: "{{ env.redhat.pull_secret }}"  # References pull_secret from all.yaml (will be auto-updated with registry credentials)
     mirror_pull_secret: "{{ env.redhat.pull_secret }}"  # Same as pull_secret, used for mirroring operations
     pull_through:
+      enabled: false              # Set to true for Artifactory pull-through; false (or omit) for air-gap bastion registry
       # Configure it for Artifactory only. For Nexus comment it out
       quay_repo: 'quay-io'    # Artifactory virtual repository key proxying quay.io
     ca_trusted: false  # Set to false to auto-generate self-signed certificate, true if using provided cert

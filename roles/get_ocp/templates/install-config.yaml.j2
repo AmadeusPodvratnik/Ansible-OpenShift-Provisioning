@@ -39,10 +39,10 @@ networking:
 platform:
   none: {}
 fips: {{ install_config_vars.fips }}
-pullSecret: {{ ((env.redhat.pull_secret if not disconnected_enabled else (disconnected.registry.mirror_pull_secret if (use_pull_through_registry | default(false)) else disconnected.registry.pull_secret)) if ((env.redhat.pull_secret if not disconnected_enabled else (disconnected.registry.mirror_pull_secret if (use_pull_through_registry | default(false)) else disconnected.registry.pull_secret)) is string) else ((env.redhat.pull_secret if not disconnected_enabled else (disconnected.registry.mirror_pull_secret if (use_pull_through_registry | default(false)) else disconnected.registry.pull_secret)) | to_json)) | to_json }}
+pullSecret: {{ ((env.redhat.pull_secret if not disconnected_enabled else (disconnected.registry.mirror_pull_secret if (disconnected.registry.pull_through.enabled | default(false)) else disconnected.registry.pull_secret)) if ((env.redhat.pull_secret if not disconnected_enabled else (disconnected.registry.mirror_pull_secret if (disconnected.registry.pull_through.enabled | default(false)) else disconnected.registry.pull_secret)) is string) else ((env.redhat.pull_secret if not disconnected_enabled else (disconnected.registry.mirror_pull_secret if (disconnected.registry.pull_through.enabled | default(false)) else disconnected.registry.pull_secret)) | to_json)) | to_json }}
 {% if disconnected_enabled %}
 {{ 'imageContentSources: ' }}
-{% if use_pull_through_registry | default(false) %}
+{% if disconnected.registry.pull_through.enabled | default(false) %}
 {{ '- mirrors:'}}
 {{ '  - ' + disconnected.registry.url + '/' + ((disconnected.registry.pull_through.quay_repo | default('')) + ('/' if disconnected.registry.pull_through.quay_repo | default('') != '' else '') + 'openshift-release-dev/ocp-release') }}
 {{ '  source: quay.io/openshift-release-dev/ocp-release' }}
