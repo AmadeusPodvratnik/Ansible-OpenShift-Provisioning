@@ -35,8 +35,11 @@ ansible-playbook playbooks/master_playbook_for_abi.yaml
 
 - [ ] Set `installation_type: lpar` in all.yaml
 - [ ] Set `abi.flag: True` in all.yaml
+- [ ] Configure `env.cluster.nodes.control.mac` (and compute `.mac`) in all.yaml
+  - **RoCE / DPM:** Use physical or DPM assigned MAC address
+  - **Non-DPM with OSA/HiperSockets:** Use a **randomly generated MAC address** (e.g., `52:54:00:xx:yy:zz`)
 - [ ] Configure `lpar.storage_group_1` in each node's host_vars
-- [ ] Verify `storage_group_1.type: fcp`
+- [ ] Verify `storage_group_1.type: fcp` (or DASD)
 - [ ] Ensure dev_num, storage_wwpn, and lun_name are set
 - [ ] Node names in all.yaml match host_vars filenames
 

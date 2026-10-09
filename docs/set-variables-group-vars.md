@@ -112,6 +112,11 @@
 **env.cluster.networking.interface** | Name of the networking interface on the bastion from Linux's perspective. Most likely enc1. | enc1
 
 ## 7 - Bootstrap Node
+
+> **ABI installs (`abi.flag: true`):** Comment out or remove the entire `bootstrap:` block. The Agent-Based Installer handles bootstrapping internally — no separate bootstrap VM or LPAR is needed. All bootstrap DNS records, HAProxy entries, and playbook tasks are automatically skipped when this section is absent. Do **not** leave placeholder `#X` values — YAML parses them as literal strings, making the variable appear defined and causing failures.
+
+> **UPI installs only:** fill in the fields below.
+
 **Variable Name** | **Description** | **Example**
 :--- | :--- | :---
 **env.cluster.nodes.bootstrap.disk_size** | How much disk space do you want to allocate to the bootstrap node (in Gigabytes)? Bootstrap node is temporary and will be brought down automatically when its job completes. 120 or more recommended. | 120
@@ -131,11 +136,11 @@
 **env.cluster.nodes.control.ram** | How much memory would you like to allocate to the each control node (in megabytes)? Recommended 16384 or more. | 16384
 **env.cluster.nodes.control.vcpu** | How many virtual CPUs would you like to allocate to each control node? Recommended 4 or more. | 4
 **env.cluster.nodes.control.vcpu_model_option** | Configure the CPU model and CPU features exposed to the guest | --cpu host
-**env.cluster.nodes.control.vm_name** | Name of the control node VMs. Arbitrary values. Usually no more or less than 3 are used. Must match the total number of IP addresses and hostnames for control nodes. Use provided list format. | control-1control-2control-3
+**env.cluster.nodes.control.vm_name** | **KVM:** Name of the libvirt VM for each control node — arbitrary, used by `virt-install`. **LPAR ABI:** Filename stem of the corresponding `host_vars/<vm_name>.yaml` file. Used by `boot_LPAR_abi` to load LPAR/HMC credentials and by `agent-config.yaml.j2` to look up FCP `rootDeviceHints`. Does **not** need to match the OCP hostname; set `env.cluster.nodes.control.hostname` separately for that. Usually no more or less than 3 are used. Must match the total number of IP addresses and hostnames for control nodes. Use provided list format. | control-1control-2control-3
 **env.cluster.nodes.control.ip** | IPv4 address of the control nodes. Use provided list formatting. | 192.168.10.5192.168.10.6192.168.10.7
 **env.cluster.nodes.control.ipv6** | IPv6 address for the control nodes. Use iprovided list formatting (if use_ipv6 variable is 'True'). | fd00::5fd00::6fd00::7
-**env.cluster.nodes.control.mac** | MAC address for the control node if use_dhcp variable is 'True'. | 52:54:00:18:1A:2B
-**env.cluster.nodes.control.hostname** | Hostnames for control nodes. Must match the total number of IP addresses for control nodes (usually 3). If DNS is hosted on the bastion, this can be anything. If DNS is hosted elsewhere, this must match DNS definition. This will be combined with the metadata_name and base_domain to create a Fully Qualififed Domain Name (FQDN). | control-01control-02control-03
+**env.cluster.nodes.control.mac** | **KVM:** MAC address for the control node if use_dhcp variable is 'True'.<br>**LPAR ABI:** Required. For RoCE adapters or DPM environments, provide the adapter's physical/assigned MAC address. For non-DPM environments using non-RoCE adapters (e.g. OSA-Express / HiperSockets), provide a randomly generated MAC address (e.g. `52:54:00:18:1A:2B`), which is assigned to the network interface at boot time via the parm file. | 52:54:00:18:1A:2B
+**env.cluster.nodes.control.hostname** | Hostnames for control nodes — the short name used in DNS A/PTR records and HAProxy server lines. Must match the total number of IP addresses for control nodes (usually 3). If DNS is hosted on the bastion, this can be anything. If DNS is hosted elsewhere, this must match DNS definition. This will be combined with the metadata_name and base_domain to create a Fully Qualified Domain Name (FQDN). **LPAR ABI:** This is the `hostname:` field written into `agent-config.yaml` and is independent of `vm_name`. | control-01control-02control-03
 
 ## 9 - Compute Nodes
 **Variable Name** | **Description** | **Example**
@@ -144,11 +149,11 @@
 **env.cluster.nodes.compute.ram** | How much memory would you like to allocate to the each compute node (in megabytes)? Recommended 16384 or more. | 16384
 **env.cluster.nodes.compute.vcpu** | How many virtual CPUs would you like to allocate to each compute node? Recommended 2 or more. | 2
 **env.cluster.nodes.compute.vcpu_model_option** | Configure the CPU model and CPU features exposed to the guest | --cpu host
-**env.cluster.nodes.compute.vm_name** | Name of the compute node VMs. Arbitrary values. This list can be expanded to any number of nodes, minimum 2. Must match the total number of IP addresses and hostnames for compute nodes. Use provided list format. | compute-1compute-2
+**env.cluster.nodes.compute.vm_name** | **KVM:** Name of the libvirt VM for each compute node — arbitrary, used by `virt-install`. **LPAR ABI:** Filename stem of the corresponding `host_vars/<vm_name>.yaml` file. Used by `boot_LPAR_abi` to load LPAR/HMC credentials and by `agent-config.yaml.j2` to look up FCP `rootDeviceHints`. Does **not** need to match the OCP hostname; set `env.cluster.nodes.compute.hostname` separately for that. This list can be expanded to any number of nodes, minimum 2. Must match the total number of IP addresses and hostnames for compute nodes. Use provided list format. | compute-1compute-2
 **env.cluster.nodes.compute.ip** | IPv4 address of the compute nodes. Must match the total number of VM names and hostnames for compute nodes. Use provided list formatting. | 192.168.10.8192.168.10.9
 **env.cluster.nodes.control.ipv6** | IPv6 address for the compute nodes. Use iprovided list formatting (if use_ipv6 variable is 'True'). | fd00::8fd00::9
-**env.cluster.nodes.compute.mac** | MAC address for the compute node if use_dhcp variable is 'True'. | 52:54:00:18:1A:2B
-**env.cluster.nodes.compute.hostname** | Hostnames for compute nodes. Must match the total number of IP addresses and VM names for compute nodes. If DNS is hosted on the bastion, this can be anything. If DNS is hosted elsewhere, this must match DNS definition. This will be combined with the metadata_name and base_domain to create a Fully Qualififed Domain Name (FQDN). | compute-01compute-02
+**env.cluster.nodes.compute.mac** | **KVM:** MAC address for the compute node if use_dhcp variable is 'True'.<br>**LPAR ABI:** Required. For RoCE adapters or DPM environments, provide the adapter's physical/assigned MAC address. For non-DPM environments using non-RoCE adapters (e.g. OSA-Express / HiperSockets), provide a randomly generated MAC address (e.g. `52:54:00:18:1A:2B`), which is assigned to the network interface at boot time via the parm file. | 52:54:00:18:1A:2B
+**env.cluster.nodes.compute.hostname** | Hostnames for compute nodes — the short name used in DNS A/PTR records and HAProxy server lines. Must match the total number of IP addresses and VM names for compute nodes. If DNS is hosted on the bastion, this can be anything. If DNS is hosted elsewhere, this must match DNS definition. This will be combined with the metadata_name and base_domain to create a Fully Qualified Domain Name (FQDN). **LPAR ABI:** This is the `hostname:` field written into `agent-config.yaml` and is independent of `vm_name`. | compute-01compute-02
 
 ## 10 - Infra Nodes
 **Variable Name** | **Description** | **Example**
@@ -220,6 +225,8 @@
 **abi.ocp_installer_base_url** | This is the base url of openshift installer binary it will remain same as static value, User Do not need to give value until user wants to change the mirror | 'https://mirror.openshift.com/pub/openshift-v4/'
 **abi.architecture** | The installer binary supports two architecture options: multi and s390x. Users are required to specify the appropriate architecture value based on their deployment environment. | 'multi/s390x'
 **abi.boot_method** | Specifies the boot type for Agent-based Installation (ABI). Users must choose either iso or pxe based on the deployment method. Note: iso boot is supported only on KVM platforms. | 'iso/pxe'
+**abi.install_timeout** | <b>(Optional)</b> Maximum time in seconds the playbook waits for `openshift-install agent wait-for install-complete` to finish. The default is 7200 (2 hours). Slower environments (limited CPU, memory, disk or network speed, slow registry or mirror access, or many nodes) can need longer; if `monitor_create_abi_cluster.yaml` stops with the 'wait-for install-complete' retries exhausted while the installation is still progressing, increase this value (for example 14400) and run the monitor playbook again. | 10800
+**abi.install_poll_delay** | <b>(Optional)</b> Interval in seconds between two status checks of the running installer. Default is 30. A larger value only reduces the number of status checks and log lines; it does not change the total wait time. | 60
 
 ## OpenShift Settings
 * The parameters bellow have a hierachical structure and need to be added to all.yaml in given format. For example if you want to change the hyperthreading (disable) than you need to specify the following value in all.yaml file:
@@ -441,3 +448,77 @@ These parameters control the download of kubeconfig and kubepassw files from the
 **kubeconfig_dest_dir** | Destination directory on the local controller where downloaded files will be stored. Files are stored in a `kubeconfig/` subdirectory within this path. | /tmp
 **kubeconfig_source_dir** | Source directory on the bastion host from which files will be downloaded. | ~/ocpinst/auth
 **kubeconfig_files** | List of files to download from the bastion host. | ['kubeconfig', 'kubeadmin-password']
+
+## Manual DNS and HAProxy Configuration Reference
+
+This section applies when **`env.bastion.options.dns: false`** (DNS is not managed on the bastion) or **`env.bastion.options.loadbalancer.on_bastion: false`** (HAProxy is not on the bastion). In those cases you must create the following records and backend entries yourself in your external DNS / load-balancer before running the cluster-installation playbooks.
+
+### DNS Records Required
+
+All FQDNs follow the pattern `<hostname>.<metadata_name>.<base_domain>` (e.g. `api.ocpz.example.com`).
+
+| Record | FQDN | Points to |
+|:---|:---|:---|
+| A | `api.<metadata_name>.<base_domain>` | HAProxy / load-balancer VIP (or bastion IP if collocated) |
+| A | `api-int.<metadata_name>.<base_domain>` | Same as `api` |
+| A (wildcard) | `*.apps.<metadata_name>.<base_domain>` | Same as `api` |
+| A | `<bootstrap_hostname>.<metadata_name>.<base_domain>` | Bootstrap node IP (`env.cluster.nodes.bootstrap.ip`) |
+| A × 3 | `<control_hostname[n]>.<metadata_name>.<base_domain>` | Each control node IP (`env.cluster.nodes.control.ip[n]`) |
+| A × N | `<compute_hostname[n]>.<metadata_name>.<base_domain>` | Each compute node IP (`env.cluster.nodes.compute.ip[n]`) |
+| PTR | Reverse for each node IP above | Corresponding FQDN |
+
+> The `metadata_name` and `base_domain` values come from `env.cluster.networking.metadata_name` and `env.cluster.networking.base_domain`.
+
+### HAProxy Backend Entries Required
+
+If you are providing your own load balancer, configure the following TCP frontends/backends:
+
+**Port 6443 — Kubernetes API**
+```
+frontend api-6443
+  bind *:6443
+  default_backend ocp4-kubernetes-api-server
+backend ocp4-kubernetes-api-server
+  balance source
+  server bootstrap <bootstrap_ip>:6443 check
+  server control-0 <control_ip_0>:6443 check
+  server control-1 <control_ip_1>:6443 check
+  server control-2 <control_ip_2>:6443 check
+```
+
+**Port 22623 — Machine Config Server (internal)**
+```
+frontend mcs-22623
+  bind *:22623
+  default_backend ocp4-machine-config-server
+backend ocp4-machine-config-server
+  balance source
+  server bootstrap <bootstrap_ip>:22623 check
+  server control-0 <control_ip_0>:22623 check
+  server control-1 <control_ip_1>:22623 check
+  server control-2 <control_ip_2>:22623 check
+```
+
+**Port 443 — HTTPS Ingress**
+```
+frontend https-443
+  bind *:443
+  default_backend ocp4-https
+backend ocp4-https
+  balance source
+  server compute-0 <compute_ip_0>:443 check
+  server compute-1 <compute_ip_1>:443 check
+```
+
+**Port 80 — HTTP Ingress**
+```
+frontend http-80
+  bind *:80
+  default_backend ocp4-http
+backend ocp4-http
+  balance source
+  server compute-0 <compute_ip_0>:80 check
+  server compute-1 <compute_ip_1>:80 check
+```
+
+> Remove the `bootstrap` server entries from ports 6443 and 22623 once the bootstrap node is no longer needed (after `openshift-install wait-for bootstrap-complete`).
