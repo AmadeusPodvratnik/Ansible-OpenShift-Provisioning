@@ -36,7 +36,6 @@ parser.add_argument("--log_level", type=str, help="can be of type INFO or DEBUG"
 args = parser.parse_args()
 
 
-
 # Example usage:
 # cpc_name = "CPC_NAME" # this is the CEC/CPC hosting the target LPAR
 # hmc_address = "hmc.example.com" # URL where HMC API is running
@@ -82,15 +81,19 @@ lpar_parameters = {
         }
     }
 }
+
+def _strip_0x(val):
+    """Strip leading '0x' or '0X' prefix (HMC API expects plain hex strings)."""
+    return val[2:] if isinstance(val, str) and val.lower().startswith('0x') else val
+
 if args.livedisktype.lower()=="dasd" and args.livedisklun=="na" and args.livediskwwpn=="na":
     lpar_parameters["boot_params"]["devicenr"]=args.devicenr
 elif args.livedisktype.lower()=="scsi" and args.livedisklun!="na" and args.livediskwwpn!="na":
-    lpar_parameters["boot_params"]["lun"]=args.livedisklun
-    lpar_parameters["boot_params"]["wwpn"]=args.livediskwwpn
+    lpar_parameters["boot_params"]["lun"]=_strip_0x(args.livedisklun)
+    lpar_parameters["boot_params"]["wwpn"]=_strip_0x(args.livediskwwpn)
     lpar_parameters["boot_params"]["devicenr"]=args.devicenr
     lpar_parameters["boot_params"]["uuid"]=args.livediskuuid
 else:
     raise Exception("Please check the live disk details")
 hmc.start(lpar_name, lpar_cpu, lpar_memory, lpar_parameters)
 hmc.logoff()
-
